@@ -5,8 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "postbuild": "cp -r public .next/standalone/ && cp -r .next/static .next/standalone/.next/",
-    "start": "node .next/standalone/server.js",
+    "start": "next start",
     "start:dev": "next start",
     "lint": "next lint",
     "deploy:prepare": "npm run build && echo '\n✅ Build completo. Faça upload de .next/standalone/ para a Hostinger.\nVeja DEPLOY.md para instruções detalhadas.'"

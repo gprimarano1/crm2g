@@ -1,11 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   // ================================================================
-  // Standalone output — required for Node.js deploy (Hostinger)
-  // ================================================================
-  output: "standalone",
-
-  // ================================================================
   // Image optimization — allow external sources
   // ================================================================
   images: {
