@@ -1,0 +1,282 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { format, subDays } from "date-fns";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
+import {
+  getCampanhas,
+  pausarCampanha,
+  ativarCampanha,
+  atualizarOrcamento,
+  type CampanhaMetaData,
+  type DateRange,
+} from "@/lib/meta/campanhas";
+
+// ================================================================
+// Types
+// ================================================================
+
+export type CampanhaStatus = "ativa" | "pausada" | "encerrada" | "rascunho";
+
+export type Campanha = {
+  id: string;
+  cliente_id: string;
+  meta_campaign_id: string | null;
+  meta_adset_id: string | null;
+  nome: string;
+  objetivo: string | null;
+  status: CampanhaStatus;
+  orcamento_diario: number | null;
+  gasto_total: number;
+  impressoes: number;
+  alcance: number;
+  frequencia: number;
+  cliques: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  leads: number;
+  mensagens: number;
+  visitas_site: number;
+  visitas_perfil: number;
+  seguidores: number;
+  cpl_medio: number;
+  periodo_inicio: string | null;
+  periodo_fim: string | null;
+  synced_at: string | null;
+  created_at: string;
+};
+
+export type SyncResult =
+  | { success: true; campaigns: number; clienteId: string }
+  | { success: false; error: string; clienteId: string };
+
+type ActionResult<T = void> =
+  | { success: true; data: T }
+  | { success: false; error: string };
+
+// ================================================================
+// syncClienteCampanhas — sincroniza campanhas do Meta → Supabase
+// Pode ser chamada por server actions, API routes ou cron jobs
+// ================================================================
+
+export async function syncClienteCampanhas(
+  clienteId: string
+): Promise<SyncResult> {
+  const supabase = await createAdminClient();
+
+  // Busca credenciais do cliente
+  const { data: cliente, error: clienteError } = await supabase
+    .from("clientes")
+    .select("meta_ad_account_id, meta_access_token, nome_empresa")
+    .eq("id", clienteId)
+    .single();
+
+  if (clienteError || !cliente) {
+    return { success: false, error: "Cliente não encontrado", clienteId };
+  }
+
+  if (!cliente.meta_ad_account_id || !cliente.meta_access_token) {
+    return {
+      success: false,
+      error: `${cliente.nome_empresa} não tem credenciais Meta configuradas`,
+      clienteId,
+    };
+  }
+
+  const dateRange: DateRange = {
+    since: format(subDays(new Date(), 7), "yyyy-MM-dd"),
+    until: format(new Date(), "yyyy-MM-dd"),
+  };
+
+  let campanhasData: CampanhaMetaData[];
+  try {
+    campanhasData = await getCampanhas(
+      cliente.meta_ad_account_id,
+      cliente.meta_access_token,
+      dateRange
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg, clienteId };
+  }
+
+  if (campanhasData.length === 0) {
+    return { success: true, campaigns: 0, clienteId };
+  }
+
+  const now = new Date().toISOString();
+
+  // Upsert em lote por meta_campaign_id (constraint única adicionada em 003_meta_sync.sql)
+  const rows = campanhasData.map((c) => ({
+    cliente_id: clienteId,
+    meta_campaign_id: c.meta_campaign_id,
+    nome: c.nome,
+    objetivo: c.objetivo,
+    status: c.status,
+    orcamento_diario: c.orcamento_diario,
+    gasto_total: c.gasto_total,
+    impressoes: c.impressoes,
+    alcance: c.alcance,
+    frequencia: c.frequencia,
+    cliques: c.cliques,
+    ctr: c.ctr,
+    cpc: c.cpc,
+    cpm: c.cpm,
+    leads: c.leads,
+    mensagens: c.mensagens,
+    visitas_site: c.visitas_site,
+    cpl_medio: c.cpl_medio,
+    periodo_inicio: dateRange.since,
+    periodo_fim: dateRange.until,
+    synced_at: now,
+  }));
+
+  const { error: upsertError } = await supabase
+    .from("campanhas")
+    .upsert(rows, { onConflict: "cliente_id,meta_campaign_id" });
+
+  if (upsertError) {
+    return { success: false, error: upsertError.message, clienteId };
+  }
+
+  // Atualiza timestamp de última sincronização no cliente
+  await supabase
+    .from("clientes")
+    .update({ meta_last_synced_at: now } as Record<string, unknown>)
+    .eq("id", clienteId);
+
+  return { success: true, campaigns: campanhasData.length, clienteId };
+}
+
+// ================================================================
+// syncCampanhasAction — server action chamada pela UI
+// ================================================================
+
+export async function syncCampanhasAction(
+  clienteId: string
+): Promise<ActionResult<{ campaigns: number }>> {
+  const result = await syncClienteCampanhas(clienteId);
+
+  if (!result.success) {
+    return { success: false, error: result.error };
+  }
+
+  revalidatePath("/campanhas");
+  revalidatePath(`/clientes/${clienteId}`);
+  return { success: true, data: { campaigns: result.campaigns } };
+}
+
+// ================================================================
+// getCampanhasCliente — busca campanhas salvas no Supabase
+// ================================================================
+
+export async function getCampanhasCliente(
+  clienteId: string,
+  opts?: { status?: string }
+): Promise<Campanha[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("campanhas")
+    .select("*")
+    .eq("cliente_id", clienteId)
+    .order("gasto_total", { ascending: false });
+
+  if (opts?.status && opts.status !== "todos") {
+    query = query.eq("status", opts.status);
+  }
+
+  const { data } = await query;
+  return (data ?? []) as Campanha[];
+}
+
+// ================================================================
+// toggleCampanhaStatus — pausa ou ativa via Meta API + atualiza DB
+// ================================================================
+
+export async function toggleCampanhaStatusAction(
+  campanhaId: string,
+  metaCampaignId: string,
+  clienteId: string,
+  novoStatus: "ativa" | "pausada"
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  // Busca access token do cliente
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("meta_access_token")
+    .eq("id", clienteId)
+    .single();
+
+  if (!cliente?.meta_access_token) {
+    return { success: false, error: "Token de acesso Meta não configurado" };
+  }
+
+  try {
+    if (novoStatus === "pausada") {
+      await pausarCampanha(metaCampaignId, cliente.meta_access_token);
+    } else {
+      await ativarCampanha(metaCampaignId, cliente.meta_access_token);
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg };
+  }
+
+  // Atualiza no Supabase
+  const { error } = await supabase
+    .from("campanhas")
+    .update({ status: novoStatus })
+    .eq("id", campanhaId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/campanhas");
+  return { success: true, data: undefined };
+}
+
+// ================================================================
+// atualizarOrcamentoAction — atualiza orçamento via Meta API + DB
+// ================================================================
+
+export async function atualizarOrcamentoAction(
+  campanhaId: string,
+  metaAdSetId: string,
+  clienteId: string,
+  novoOrcamentoBRL: number
+): Promise<ActionResult> {
+  const supabase = await createClient();
+
+  const { data: cliente } = await supabase
+    .from("clientes")
+    .select("meta_access_token")
+    .eq("id", clienteId)
+    .single();
+
+  if (!cliente?.meta_access_token) {
+    return { success: false, error: "Token de acesso Meta não configurado" };
+  }
+
+  try {
+    await atualizarOrcamento(
+      metaAdSetId,
+      novoOrcamentoBRL,
+      cliente.meta_access_token
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg };
+  }
+
+  const { error } = await supabase
+    .from("campanhas")
+    .update({ orcamento_diario: novoOrcamentoBRL })
+    .eq("id", campanhaId);
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/campanhas");
+  return { success: true, data: undefined };
+}

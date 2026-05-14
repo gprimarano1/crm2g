@@ -1,0 +1,21 @@
+import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@/lib/supabase/server";
+
+export async function GET(
+  _request: NextRequest,
+  { params }: { params: { id: string } }
+) {
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("lead_status_history")
+    .select("*")
+    .eq("lead_id", params.id)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  return NextResponse.json({ history: data ?? [] });
+}

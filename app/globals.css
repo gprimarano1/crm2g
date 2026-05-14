@@ -1,27 +1,211 @@
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Backgrounds */
+  --bg-primary: #0a0a0f;
+  --bg-surface: #111118;
+  --bg-surface2: #18181f;
+  --bg-border: #25252f;
+
+  /* Brand */
+  --accent: #5b6ef5;
+  --accent-hover: #6e80ff;
+  --accent-muted: rgba(91, 110, 245, 0.12);
+
+  /* Status */
+  --success: #22d37a;
+  --success-muted: rgba(34, 211, 122, 0.12);
+  --danger: #f55b5b;
+  --danger-muted: rgba(245, 91, 91, 0.12);
+  --warning: #f5c542;
+  --warning-muted: rgba(245, 197, 66, 0.12);
+
+  /* Text */
+  --text-primary: #e8e8f0;
+  --text-muted: #8888a8;
+  --text-subtle: #55556a;
+
+  /* Shadows */
+  --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.4);
+  --shadow-glow: 0 0 20px rgba(91, 110, 245, 0.25);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  * {
+    @apply border-bg-border;
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply antialiased;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+  }
+
+  body {
+    @apply font-body;
+    background-color: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display;
+    color: var(--text-primary);
+    line-height: 1.2;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-surface);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: var(--bg-border);
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--text-subtle);
+  }
+
+  ::selection {
+    background-color: var(--accent-muted);
+    color: var(--accent);
   }
 }
 
-body {
-  color: var(--foreground);
-  background: var(--background);
-  font-family: Arial, Helvetica, sans-serif;
+@layer components {
+  /* Cards */
+  .card {
+    @apply rounded-2xl border border-bg-border bg-bg-surface;
+    box-shadow: var(--shadow-card);
+  }
+
+  .card-surface2 {
+    @apply rounded-2xl border border-bg-border bg-bg-surface2;
+  }
+
+  /* Buttons */
+  .btn-primary {
+    @apply inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium text-white transition-all duration-200;
+    background: var(--accent);
+  }
+
+  .btn-primary:hover {
+    background: var(--accent-hover);
+    box-shadow: var(--shadow-glow);
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium transition-all duration-200;
+    color: var(--text-muted);
+    background: transparent;
+  }
+
+  .btn-ghost:hover {
+    background: var(--bg-surface2);
+    color: var(--text-primary);
+  }
+
+  /* Inputs */
+  .input {
+    @apply w-full rounded-xl border px-4 py-2.5 text-sm outline-none transition-all duration-200;
+    background: var(--bg-surface2);
+    border-color: var(--bg-border);
+    color: var(--text-primary);
+  }
+
+  .input::placeholder {
+    color: var(--text-subtle);
+  }
+
+  .input:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--accent-muted);
+  }
+
+  /* Badges */
+  .badge-success {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    color: var(--success);
+    background: var(--success-muted);
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    color: var(--danger);
+    background: var(--danger-muted);
+  }
+
+  .badge-warning {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    color: var(--warning);
+    background: var(--warning-muted);
+  }
+
+  .badge-accent {
+    @apply inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium;
+    color: var(--accent);
+    background: var(--accent-muted);
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer;
+    color: var(--text-muted);
+  }
+
+  .nav-item:hover {
+    background: var(--bg-surface2);
+    color: var(--text-primary);
+  }
+
+  .nav-item.active {
+    background: var(--accent-muted);
+    color: var(--accent);
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply card p-5 flex flex-col gap-3;
+  }
+
+  /* Table */
+  .table-row {
+    @apply border-b border-bg-border transition-colors duration-150;
+  }
+
+  .table-row:hover {
+    background: var(--bg-surface2);
+  }
 }
 
 @layer utilities {
+  .text-gradient-accent {
+    background: linear-gradient(135deg, #5b6ef5 0%, #8b5cf6 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
   .text-balance {
     text-wrap: balance;
+  }
+
+  .glow-accent {
+    box-shadow: var(--shadow-glow);
+  }
+
+  .glow-success {
+    box-shadow: 0 0 20px rgba(34, 211, 122, 0.25);
   }
 }

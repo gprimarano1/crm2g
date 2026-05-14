@@ -1,0 +1,5 @@
+-- ================================================================
+-- CRM 2G — Schema inicial (SUPERADO)
+-- Este arquivo foi substituído por 002_complete_schema.sql
+-- Rodar APENAS o arquivo 002 no Supabase SQL Editor
+-- ================================================================
