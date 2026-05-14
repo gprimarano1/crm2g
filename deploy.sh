@@ -113,6 +113,20 @@ cat > "$TEMP_DIR/.gitignore" << 'EOF'
 *.local
 EOF
 
+# Cria wrapper que captura crashes e os loga antes de sair
+cat > "$TEMP_DIR/start.js" << 'EOF'
+process.on('uncaughtException', (err) => {
+  console.error('[CRASH uncaughtException]', err.message);
+  console.error(err.stack);
+  process.exit(1);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[CRASH unhandledRejection]', reason);
+  process.exit(1);
+});
+require('./server.js');
+EOF
+
 # Cria package.json mínimo para a Hostinger saber o entry point
 # "build" é no-op: app já veio buildado, Hostinger só precisa do script existir
 cat > "$TEMP_DIR/package.json" << 'EOF'
@@ -122,7 +136,7 @@ cat > "$TEMP_DIR/package.json" << 'EOF'
   "private": true,
   "scripts": {
     "build": "echo 'App already built — skipping'",
-    "start": "node server.js"
+    "start": "node start.js"
   }
 }
 EOF
