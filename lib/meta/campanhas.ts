@@ -44,6 +44,34 @@ export interface MetaAdSet {
   bid_amount?: string;
 }
 
+export interface MetaAd {
+  id: string;
+  name: string;
+  status: "ACTIVE" | "PAUSED" | "DELETED" | "ARCHIVED";
+  effective_status: string;
+}
+
+export interface AdSetMetaData {
+  id: string;
+  nome: string;
+  status: "ativa" | "pausada" | "encerrada";
+  orcamento_diario: number | null;
+  gasto: number;
+  impressoes: number;
+  alcance: number;
+  cliques: number;
+  ctr: number;
+  cpc: number;
+  cpm: number;
+  leads: number;
+}
+
+export interface AnuncioMetaData {
+  id: string;
+  nome: string;
+  status: "ativa" | "pausada" | "encerrada";
+}
+
 // Resultado normalizado da campanha com métricas já parseadas
 export interface CampanhaMetaData {
   meta_campaign_id: string;
@@ -166,22 +194,80 @@ export async function getCampanhas(
 }
 
 // ================================================================
-// getAdSets — ad sets de uma campanha
+// getAdSets — ad sets de uma campanha com insights embutidos
 // ================================================================
 
 export async function getAdSets(
   campaignId: string,
+  accessToken: string,
+  dateRange?: DateRange
+): Promise<AdSetMetaData[]> {
+  const insightFields = "spend,impressions,reach,clicks,ctr,cpc,cpm,actions";
+  const fields = [
+    "id",
+    "name",
+    "status",
+    "daily_budget",
+    `insights.fields(${insightFields})`,
+  ].join(",");
+
+  const params: Record<string, string> = { fields, limit: "50" };
+  if (dateRange) {
+    params.time_range = JSON.stringify(dateRange);
+  }
+
+  type AdSetRaw = {
+    id: string;
+    name: string;
+    status: string;
+    daily_budget?: string;
+    insights?: { data: MetaInsightsRaw[] };
+  };
+  type Res = { data: AdSetRaw[] };
+
+  const res = await metaFetch<Res>(`${campaignId}/adsets`, accessToken, params);
+
+  return (res.data ?? []).map((raw) => {
+    const ins = raw.insights?.data?.[0];
+    const gasto = Number(ins?.spend ?? 0);
+    const leads = extractAction(ins?.actions, "lead");
+    return {
+      id: raw.id,
+      nome: raw.name,
+      status: mapStatus(raw.status),
+      orcamento_diario: raw.daily_budget ? Number(raw.daily_budget) / 100 : null,
+      gasto,
+      impressoes: Number(ins?.impressions ?? 0),
+      alcance: Number(ins?.reach ?? 0),
+      cliques: Number(ins?.clicks ?? 0),
+      ctr: Number(ins?.ctr ?? 0),
+      cpc: Number(ins?.cpc ?? 0),
+      cpm: Number(ins?.cpm ?? 0),
+      leads,
+    };
+  });
+}
+
+// ================================================================
+// getAds — anúncios de um ad set
+// ================================================================
+
+export async function getAds(
+  adSetId: string,
   accessToken: string
-): Promise<MetaAdSet[]> {
-  type Res = { data: MetaAdSet[] };
+): Promise<AnuncioMetaData[]> {
+  type Res = { data: MetaAd[] };
 
-  const res = await metaFetch<Res>(
-    `${campaignId}/adsets`,
-    accessToken,
-    { fields: "id,name,status,daily_budget,bid_amount", limit: "50" }
-  );
+  const res = await metaFetch<Res>(`${adSetId}/ads`, accessToken, {
+    fields: "id,name,status,effective_status",
+    limit: "50",
+  });
 
-  return res.data ?? [];
+  return (res.data ?? []).map((ad) => ({
+    id: ad.id,
+    nome: ad.name,
+    status: mapStatus(ad.status),
+  }));
 }
 
 // ================================================================
@@ -255,6 +341,56 @@ export async function ativarCampanha(
 // A Meta API recebe em centavos (50.00 → 5000)
 // ================================================================
 
+// ================================================================
+// pausarAdSet / ativarAdSet
+// ================================================================
+
+export async function pausarAdSet(
+  adSetId: string,
+  accessToken: string
+): Promise<void> {
+  await metaFetch<{ success: boolean }>(adSetId, accessToken, {}, {
+    method: "POST",
+    body: { status: "PAUSED" },
+  });
+}
+
+export async function ativarAdSet(
+  adSetId: string,
+  accessToken: string
+): Promise<void> {
+  await metaFetch<{ success: boolean }>(adSetId, accessToken, {}, {
+    method: "POST",
+    body: { status: "ACTIVE" },
+  });
+}
+
+// ================================================================
+// pausarAnuncio / ativarAnuncio
+// ================================================================
+
+export async function pausarAnuncio(
+  adId: string,
+  accessToken: string
+): Promise<void> {
+  await metaFetch<{ success: boolean }>(adId, accessToken, {}, {
+    method: "POST",
+    body: { status: "PAUSED" },
+  });
+}
+
+export async function ativarAnuncio(
+  adId: string,
+  accessToken: string
+): Promise<void> {
+  await metaFetch<{ success: boolean }>(adId, accessToken, {}, {
+    method: "POST",
+    body: { status: "ACTIVE" },
+  });
+}
+
+// ================================================================
+// atualizarOrcamento — atualiza o daily_budget de um AdSet
 export async function atualizarOrcamento(
   adSetId: string,
   dailyBudgetBRL: number,

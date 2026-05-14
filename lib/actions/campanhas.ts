@@ -5,12 +5,22 @@ import { format, subDays } from "date-fns";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   getCampanhas,
+  getAdSets,
+  getAds,
   pausarCampanha,
   ativarCampanha,
+  pausarAdSet,
+  ativarAdSet,
+  pausarAnuncio,
+  ativarAnuncio,
   atualizarOrcamento,
   type CampanhaMetaData,
+  type AdSetMetaData,
+  type AnuncioMetaData,
   type DateRange,
 } from "@/lib/meta/campanhas";
+
+export type { AdSetMetaData, AnuncioMetaData };
 
 // ================================================================
 // Types
@@ -279,4 +289,113 @@ export async function atualizarOrcamentoAction(
 
   revalidatePath("/campanhas");
   return { success: true, data: undefined };
+}
+
+// ================================================================
+// Helpers compartilhados
+// ================================================================
+
+async function getClienteToken(clienteId: string): Promise<string | null> {
+  const supabase = await createClient();
+  const { data } = await supabase
+    .from("clientes")
+    .select("meta_access_token")
+    .eq("id", clienteId)
+    .single();
+  return data?.meta_access_token ?? null;
+}
+
+// ================================================================
+// getAdSetsAction — busca ad sets de uma campanha via Meta API
+// ================================================================
+
+export async function getAdSetsAction(
+  metaCampaignId: string,
+  clienteId: string
+): Promise<ActionResult<AdSetMetaData[]>> {
+  const token = await getClienteToken(clienteId);
+  if (!token) return { success: false, error: "Token Meta não configurado" };
+
+  const dateRange: DateRange = {
+    since: format(subDays(new Date(), 7), "yyyy-MM-dd"),
+    until: format(new Date(), "yyyy-MM-dd"),
+  };
+
+  try {
+    const adSets = await getAdSets(metaCampaignId, token, dateRange);
+    return { success: true, data: adSets };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao buscar ad sets";
+    return { success: false, error: msg };
+  }
+}
+
+// ================================================================
+// getAnunciosAction — busca anúncios de um ad set via Meta API
+// ================================================================
+
+export async function getAnunciosAction(
+  metaAdSetId: string,
+  clienteId: string
+): Promise<ActionResult<AnuncioMetaData[]>> {
+  const token = await getClienteToken(clienteId);
+  if (!token) return { success: false, error: "Token Meta não configurado" };
+
+  try {
+    const ads = await getAds(metaAdSetId, token);
+    return { success: true, data: ads };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao buscar anúncios";
+    return { success: false, error: msg };
+  }
+}
+
+// ================================================================
+// toggleAdSetStatusAction — pausa ou ativa um ad set via Meta API
+// ================================================================
+
+export async function toggleAdSetStatusAction(
+  metaAdSetId: string,
+  clienteId: string,
+  novoStatus: "ativa" | "pausada"
+): Promise<ActionResult> {
+  const token = await getClienteToken(clienteId);
+  if (!token) return { success: false, error: "Token Meta não configurado" };
+
+  try {
+    if (novoStatus === "pausada") {
+      await pausarAdSet(metaAdSetId, token);
+    } else {
+      await ativarAdSet(metaAdSetId, token);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg };
+  }
+}
+
+// ================================================================
+// toggleAnuncioStatusAction — pausa ou ativa um anúncio via Meta API
+// ================================================================
+
+export async function toggleAnuncioStatusAction(
+  metaAdId: string,
+  clienteId: string,
+  novoStatus: "ativa" | "pausada"
+): Promise<ActionResult> {
+  const token = await getClienteToken(clienteId);
+  if (!token) return { success: false, error: "Token Meta não configurado" };
+
+  try {
+    if (novoStatus === "pausada") {
+      await pausarAnuncio(metaAdId, token);
+    } else {
+      await ativarAnuncio(metaAdId, token);
+    }
+    return { success: true, data: undefined };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg };
+  }
 }
