@@ -23,6 +23,8 @@ export async function loginAction(
   });
 
   if (error) {
+    console.error("[loginAction] error:", error.status, error.code, error.message);
+    console.error("[loginAction] supabase url:", process.env.NEXT_PUBLIC_SUPABASE_URL?.slice(0, 30));
     const msg = error.message.toLowerCase();
     if (
       msg.includes("invalid login credentials") ||
@@ -38,7 +40,7 @@ export async function loginAction(
     if (msg.includes("rate limit") || msg.includes("too many requests")) {
       return { error: "Muitas tentativas. Aguarde alguns minutos." };
     }
-    return { error: "Erro ao entrar. Tente novamente." };
+    return { error: `[${error.status}] ${error.message}` };
   }
 
   // Verifica role para redirecionar corretamente
