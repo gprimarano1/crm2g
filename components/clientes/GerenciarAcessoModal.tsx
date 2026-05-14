@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
-  User, Mail, KeyRound, Copy, Check,
+  User, Mail, Copy, Check,
   AlertCircle, CheckCircle2, Trash2, RefreshCw,
   ShieldAlert,
 } from "lucide-react";
