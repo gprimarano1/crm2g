@@ -91,7 +91,7 @@ const nextConfig = {
   // ================================================================
   // Configurações de performance
   // ================================================================
-  output:            "standalone", // Gera .next/standalone para deploy na Hostinger
+  output:            "standalone", // Necessário para ./deploy.sh (standalone pré-compilado)
   poweredByHeader:   false,  // Remove header "X-Powered-By: Next.js"
   compress:          true,   // Gzip/Brotli
   reactStrictMode:   true,

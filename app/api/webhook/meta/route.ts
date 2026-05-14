@@ -1,7 +1,16 @@
 import crypto from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { createAdminClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
 import { sendCAPIEvent } from "@/lib/capi/client";
+
+// Cliente admin direto (sem cookies — webhook é server-to-server)
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
+  );
+}
 
 const META_API_VERSION = "v19.0";
 
@@ -26,7 +35,7 @@ async function saveLog(
   console.log(`[Webhook Meta] ${tipo} | status=${status}${erro ? ` | erro=${erro}` : ""}`, JSON.stringify(payload));
 
   try {
-    const supabase = await createAdminClient();
+    const supabase = getAdminClient();
     await supabase.from("webhook_logs").insert(entry);
   } catch (err) {
     // Não lança — log de log não pode derrubar o webhook
@@ -256,7 +265,7 @@ async function fetchLeadData(
 // ================================================================
 
 async function processLeadEvent(event: LeadgenValue): Promise<void> {
-  const supabase = await createAdminClient();
+  const supabase = getAdminClient();
 
   console.log(`[Webhook Meta] Processando lead leadgen_id=${event.leadgen_id} page_id=${event.page_id} campaign_id=${event.campaign_id}`);
 
