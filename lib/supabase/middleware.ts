@@ -30,9 +30,13 @@ export async function updateSession(request: NextRequest) {
   );
 
   // Atualiza a sessão (não usar getSession() — usa getUser() por segurança)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user = null;
+  try {
+    const { data } = await supabase.auth.getUser();
+    user = data.user;
+  } catch (err) {
+    console.error("[middleware] getUser error:", err);
+  }
 
   const { pathname } = request.nextUrl;
 
