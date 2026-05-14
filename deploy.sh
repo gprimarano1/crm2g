@@ -90,12 +90,17 @@ echo ""
 npm run build
 echo ""
 
-# ── 5. Valida standalone ──────────────────────────────────────────────────────
+# ── 5. Copia assets estáticos para standalone ─────────────────────────────────
 sep
-info "Validando pasta standalone..."
-[ -d "$STANDALONE_DIR" ]               || fail "$STANDALONE_DIR não gerado."
-[ -f "$STANDALONE_DIR/server.js" ]     || fail "server.js não encontrado."
-[ -d "$STANDALONE_DIR/.next/static" ]  || fail ".next/static não copiado."
+info "Copiando assets estáticos para standalone..."
+[ -d "$STANDALONE_DIR" ] || fail "$STANDALONE_DIR não gerado."
+[ -f "$STANDALONE_DIR/server.js" ] || fail "server.js não encontrado."
+
+# Next.js não copia automaticamente — precisa copiar manualmente
+cp -r ".next/static" "$STANDALONE_DIR/.next/static"
+cp -r "public" "$STANDALONE_DIR/public"
+
+[ -d "$STANDALONE_DIR/.next/static" ] || fail ".next/static não copiado."
 [ -d "$STANDALONE_DIR/public" ]        || fail "public/ não copiado."
 ok "Estrutura standalone OK"
 echo ""
@@ -107,24 +112,26 @@ info "Preparando branch '$DEPLOY_BRANCH'..."
 TEMP_DIR=$(mktemp -d)
 cp -r "$STANDALONE_DIR/." "$TEMP_DIR/"
 
+# Injeta error handlers no início do server.js para capturar crashes no stdout
+ORIGINAL_SERVER=$(cat "$TEMP_DIR/server.js")
+cat > "$TEMP_DIR/server.js" << 'SERVEREOF'
+// ── Error handlers (injected by deploy.sh) ──
+process.on('uncaughtException', function(err) {
+  process.stdout.write('[CRASH uncaughtException] ' + err.message + '\n' + (err.stack || '') + '\n');
+  process.exit(1);
+});
+process.on('unhandledRejection', function(reason) {
+  process.stdout.write('[CRASH unhandledRejection] ' + String(reason) + '\n');
+  process.exit(1);
+});
+process.stdout.write('[STARTUP] server.js iniciando...\n');
+SERVEREOF
+echo "$ORIGINAL_SERVER" >> "$TEMP_DIR/server.js"
+
 # Cria .gitignore mínimo para a branch de produção
 cat > "$TEMP_DIR/.gitignore" << 'EOF'
 .DS_Store
 *.local
-EOF
-
-# Cria wrapper que captura crashes e os loga antes de sair
-cat > "$TEMP_DIR/start.js" << 'EOF'
-process.on('uncaughtException', (err) => {
-  console.error('[CRASH uncaughtException]', err.message);
-  console.error(err.stack);
-  process.exit(1);
-});
-process.on('unhandledRejection', (reason) => {
-  console.error('[CRASH unhandledRejection]', reason);
-  process.exit(1);
-});
-require('./server.js');
 EOF
 
 # Cria package.json mínimo para a Hostinger saber o entry point
@@ -136,7 +143,7 @@ cat > "$TEMP_DIR/package.json" << 'EOF'
   "private": true,
   "scripts": {
     "build": "echo 'App already built — skipping'",
-    "start": "node start.js"
+    "start": "node server.js"
   }
 }
 EOF
