@@ -6,19 +6,63 @@ import { sendCAPIEvent } from "@/lib/capi/client";
 const META_API_VERSION = "v19.0";
 
 // ================================================================
+// Helper: salva log na tabela webhook_logs + console.log
+// ================================================================
+
+async function saveLog(
+  tipo: "GET" | "POST",
+  payload: Record<string, unknown>,
+  status: string,
+  erro?: string
+): Promise<void> {
+  const entry = {
+    tipo,
+    payload,
+    status,
+    erro: erro ?? null,
+  };
+
+  // Console sempre — fallback garantido
+  console.log(`[Webhook Meta] ${tipo} | status=${status}${erro ? ` | erro=${erro}` : ""}`, JSON.stringify(payload));
+
+  try {
+    const supabase = await createAdminClient();
+    await supabase.from("webhook_logs").insert(entry);
+  } catch (err) {
+    // Não lança — log de log não pode derrubar o webhook
+    console.error("[Webhook Meta] Falha ao salvar webhook_log:", err);
+  }
+}
+
+// ================================================================
 // GET — verificação do webhook pelo Meta (hub.challenge)
 // ================================================================
 
 export async function GET(request: NextRequest) {
+  const ts = new Date().toISOString();
   const { searchParams } = new URL(request.url);
+
   const mode      = searchParams.get("hub.mode");
   const token     = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
 
+  const logPayload = {
+    ts,
+    mode,
+    challenge,
+    token_recebido: token,
+    token_esperado_presente: !!process.env.META_WEBHOOK_VERIFY_TOKEN,
+    tokens_iguais: token === process.env.META_WEBHOOK_VERIFY_TOKEN,
+  };
+
   if (mode === "subscribe" && token === process.env.META_WEBHOOK_VERIFY_TOKEN) {
+    await saveLog("GET", logPayload, "verificado");
+    console.log(`[Webhook Meta] GET verificação OK — challenge=${challenge}`);
     return new NextResponse(challenge, { status: 200 });
   }
 
+  await saveLog("GET", logPayload, "falhou", "Token ou mode incorreto");
+  console.warn(`[Webhook Meta] GET verificação FALHOU — mode=${mode} token_match=${logPayload.tokens_iguais}`);
   return NextResponse.json({ error: "Verificação falhou" }, { status: 403 });
 }
 
@@ -27,8 +71,28 @@ export async function GET(request: NextRequest) {
 // ================================================================
 
 export async function POST(request: NextRequest) {
-  // Lê o body como texto para validação HMAC (deve ser feito ANTES de parsear)
-  const rawBody = await request.text();
+  const ts = new Date().toISOString();
+
+  // Captura headers relevantes para diagnóstico
+  const relevantHeaders = ["x-hub-signature-256", "content-type", "user-agent", "x-forwarded-for"];
+  const headersLog: Record<string, string> = {};
+  relevantHeaders.forEach((k) => {
+    const v = request.headers.get(k);
+    if (v) headersLog[k] = v;
+  });
+
+  console.log(`[Webhook Meta] POST recebido — ${ts}`, JSON.stringify(headersLog));
+
+  // Lê body como texto (deve ser antes de parsear para HMAC)
+  let rawBody = "";
+  try {
+    rawBody = await request.text();
+  } catch (err) {
+    await saveLog("POST", { ts, headers: headersLog, erro: String(err) }, "erro_leitura", "Falha ao ler body");
+    return NextResponse.json({ status: "ok" }); // 200 sempre
+  }
+
+  console.log(`[Webhook Meta] POST body raw (${rawBody.length} chars):`, rawBody.slice(0, 2000));
 
   // Valida assinatura HMAC-SHA256
   const sig = request.headers.get("x-hub-signature-256");
@@ -40,26 +104,59 @@ export async function POST(request: NextRequest) {
       .update(rawBody)
       .digest("hex");
 
-    if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) {
-      return NextResponse.json({ error: "Assinatura inválida" }, { status: 403 });
+    let sigOk = false;
+    try {
+      sigOk = crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected));
+    } catch {
+      sigOk = false;
     }
+
+    if (!sigOk) {
+      const errMsg = `HMAC inválido — recebido=${sig} esperado=${expected}`;
+      console.error(`[Webhook Meta] ${errMsg}`);
+      await saveLog("POST", { ts, headers: headersLog, raw_body: rawBody.slice(0, 500) }, "hmac_invalido", errMsg);
+      return NextResponse.json({ status: "ok" }); // 200 para Meta não retentar
+    }
+  } else {
+    console.warn(`[Webhook Meta] Sem validação HMAC — appSecret=${!!appSecret} sig=${!!sig}`);
   }
 
+  // Parse JSON
   let body: WebhookBody;
   try {
     body = JSON.parse(rawBody) as WebhookBody;
-  } catch {
-    return NextResponse.json({ error: "JSON inválido" }, { status: 400 });
+  } catch (err) {
+    const errMsg = `JSON inválido: ${err}`;
+    console.error(`[Webhook Meta] ${errMsg}`);
+    await saveLog("POST", { ts, headers: headersLog, raw_body: rawBody.slice(0, 500) }, "json_invalido", errMsg);
+    return NextResponse.json({ status: "ok" }); // 200 sempre
   }
 
-  // Responde 200 imediatamente — Meta exige resposta rápida
-  // Processa os leads de forma assíncrona mas ainda dentro da request
+  console.log(`[Webhook Meta] Payload parseado — object=${body.object} entries=${body.entry?.length ?? 0}`);
+
+  await saveLog("POST", {
+    ts,
+    headers: headersLog,
+    object: body.object,
+    entry_count: body.entry?.length ?? 0,
+    payload: body,
+  }, "recebido");
+
+  // Processa apenas eventos de página com leads
   if (body.object === "page") {
     const events = extractLeadEvents(body);
+    console.log(`[Webhook Meta] Eventos de lead extraídos: ${events.length}`);
+
     if (events.length > 0) {
-      // Não bloqueia a resposta em caso de erro — Meta não deve retentar por falha nossa
-      await Promise.allSettled(events.map(processLeadEvent));
+      const results = await Promise.allSettled(events.map(processLeadEvent));
+      results.forEach((r, i) => {
+        if (r.status === "rejected") {
+          console.error(`[Webhook Meta] Erro no evento ${i}:`, r.reason);
+        }
+      });
     }
+  } else {
+    console.log(`[Webhook Meta] Objeto ignorado: ${body.object}`);
   }
 
   return NextResponse.json({ status: "ok" });
@@ -161,6 +258,8 @@ async function fetchLeadData(
 async function processLeadEvent(event: LeadgenValue): Promise<void> {
   const supabase = await createAdminClient();
 
+  console.log(`[Webhook Meta] Processando lead leadgen_id=${event.leadgen_id} page_id=${event.page_id} campaign_id=${event.campaign_id}`);
+
   // 1. Encontra o cliente pelo page_id
   let clienteId: string | null = null;
   let accessToken: string | null = null;
@@ -174,8 +273,8 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
   if (clienteByPage) {
     clienteId   = clienteByPage.id;
     accessToken = clienteByPage.meta_access_token;
+    console.log(`[Webhook Meta] Cliente encontrado por page_id: ${clienteId}`);
   } else if (event.campaign_id) {
-    // Fallback: tenta encontrar via campanha sincronizada
     const { data: campanha } = await supabase
       .from("campanhas")
       .select("cliente_id, clientes!inner(meta_access_token)")
@@ -184,17 +283,19 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
 
     if (campanha) {
       clienteId = campanha.cliente_id;
-      // Supabase retorna FK join como array ou objeto dependendo da relação
       const clientes = campanha.clientes as unknown;
       const c = (Array.isArray(clientes) ? clientes[0] : clientes) as
         | { meta_access_token: string | null }
         | null;
       accessToken = c?.meta_access_token ?? null;
+      console.log(`[Webhook Meta] Cliente encontrado por campaign_id: ${clienteId}`);
     }
   }
 
   if (!clienteId) {
-    console.warn(`[Webhook Meta] Nenhum cliente encontrado para page_id=${event.page_id} campaign_id=${event.campaign_id}`);
+    const errMsg = `Nenhum cliente para page_id=${event.page_id} campaign_id=${event.campaign_id ?? "N/A"}`;
+    console.warn(`[Webhook Meta] ${errMsg}`);
+    await saveLog("POST", { event }, "sem_cliente", errMsg);
     return;
   }
 
@@ -203,12 +304,17 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
   if (accessToken) {
     try {
       fieldData = await fetchLeadData(event.leadgen_id, accessToken);
+      console.log(`[Webhook Meta] Field data do lead:`, JSON.stringify(fieldData));
     } catch (err) {
       console.error(`[Webhook Meta] Erro ao buscar lead ${event.leadgen_id}:`, err);
+      await saveLog("POST", { event, erro: String(err) }, "erro_fetch_lead", String(err));
     }
+  } else {
+    console.warn(`[Webhook Meta] Sem access token para cliente ${clienteId}`);
   }
 
   const { nome, telefone, email } = parseFieldData(fieldData);
+  console.log(`[Webhook Meta] Lead parseado: nome=${nome} tel=${telefone} email=${email}`);
 
   // 3. Salva na tabela leads (ignora duplicata por meta_lead_id unique)
   const { data: insertedLead, error } = await supabase
@@ -227,16 +333,25 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
     .select("id")
     .single();
 
-  if (error && !error.message.includes("unique")) {
-    console.error(`[Webhook Meta] Erro ao salvar lead ${event.leadgen_id}:`, error.message);
+  if (error) {
+    if (error.message.includes("unique")) {
+      console.log(`[Webhook Meta] Lead duplicado ignorado: ${event.leadgen_id}`);
+    } else {
+      console.error(`[Webhook Meta] Erro ao salvar lead:`, error.message);
+      await saveLog("POST", { event, nome, telefone, email }, "erro_insert", error.message);
+    }
     return;
   }
 
-  console.log(`[Webhook Meta] Lead salvo: ${nome} (${event.leadgen_id})`);
+  console.log(`[Webhook Meta] Lead salvo com sucesso: ${nome} id=${insertedLead?.id}`);
+  await saveLog("POST", { event, lead_id: insertedLead?.id, nome }, "lead_criado");
 
-  // 4. Dispara CAPI "Lead" para novo lead (non-blocking)
+  // 4. Dispara CAPI "Lead"
   if (insertedLead?.id) {
-    sendCAPIEvent(clienteId, insertedLead.id, "Lead", { nome, telefone: telefone ?? undefined, email: email ?? undefined })
-      .catch((err) => console.error("[Webhook Meta] CAPI Lead error:", err));
+    sendCAPIEvent(clienteId, insertedLead.id, "Lead", {
+      nome,
+      telefone: telefone ?? undefined,
+      email: email ?? undefined,
+    }).catch((err) => console.error("[Webhook Meta] CAPI Lead error:", err));
   }
 }
