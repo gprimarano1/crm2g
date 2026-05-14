@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { headers } from "next/headers";
 import { createClient } from "@/lib/supabase/server";
 import { ClienteShell } from "@/components/cliente/ClienteShell";
 
@@ -26,9 +25,9 @@ export default async function ClienteLayout({
   // Admin tentando acessar área de cliente → manda para dashboard
   if (!profile || profile.role !== "cliente") redirect("/dashboard");
 
-  // Primeiro acesso: redireciona para trocar senha (pathname via middleware header)
-  const pathname = headers().get("x-pathname") ?? "";
-  if (profile.first_login && pathname !== "/trocar-senha") {
+  // Primeiro acesso: redireciona para trocar senha
+  // /trocar-senha está fora deste grupo, então não há loop de redirect
+  if (profile.first_login) {
     redirect("/trocar-senha");
   }
 

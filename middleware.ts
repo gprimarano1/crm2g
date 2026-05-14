@@ -1,9 +1,17 @@
 import { type NextRequest, NextResponse } from "next/server";
+import { updateSession } from "@/lib/supabase/middleware";
 
-export function middleware(_request: NextRequest) {
-  return NextResponse.next();
+export async function middleware(request: NextRequest) {
+  try {
+    return await updateSession(request);
+  } catch (err) {
+    console.error("[middleware] unexpected error:", err);
+    return NextResponse.next();
+  }
 }
 
 export const config = {
-  matcher: [],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
 };

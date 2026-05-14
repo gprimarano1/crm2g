@@ -52,9 +52,8 @@ export default function TrocarSenhaPage() {
   );
 
   return (
-    <div className="flex min-h-[60vh] items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center bg-bg px-4">
       <div className="w-full max-w-sm rounded-2xl border border-bg-border bg-bg-surface p-8 shadow-lg">
-        {/* Icon + title */}
         <div className="mb-6 flex flex-col items-center gap-3 text-center">
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-accent/10 ring-1 ring-accent/30">
             <KeyRound size={22} className="text-accent" />

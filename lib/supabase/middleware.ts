@@ -45,6 +45,7 @@ export async function updateSession(request: NextRequest) {
     pathname.startsWith("/proposta/") ||
     pathname.startsWith("/relatorio/") ||
     pathname.startsWith("/api/webhook/") ||
+    pathname === "/privacidade" ||
     pathname === "/";
 
   if (isPublicRoute) return supabaseResponse;
