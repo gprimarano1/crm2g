@@ -23,6 +23,7 @@ export async function loginAction(
   });
 
   if (error) {
+    console.error("[loginAction] Supabase error:", error.status, error.code, error.message);
     const msg = error.message.toLowerCase();
     if (
       msg.includes("invalid login credentials") ||
@@ -38,7 +39,7 @@ export async function loginAction(
     if (msg.includes("rate limit") || msg.includes("too many requests")) {
       return { error: "Muitas tentativas. Aguarde alguns minutos." };
     }
-    return { error: "Erro ao entrar. Tente novamente." };
+    return { error: `Erro ao entrar: ${error.message}` };
   }
 
   // Verifica role para redirecionar corretamente
