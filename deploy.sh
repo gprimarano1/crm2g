@@ -114,12 +114,14 @@ cat > "$TEMP_DIR/.gitignore" << 'EOF'
 EOF
 
 # Cria package.json mínimo para a Hostinger saber o entry point
+# "build" é no-op: app já veio buildado, Hostinger só precisa do script existir
 cat > "$TEMP_DIR/package.json" << 'EOF'
 {
   "name": "crm2g",
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "build": "echo 'App already built — skipping'",
     "start": "node server.js"
   }
 }
