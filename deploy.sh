@@ -69,25 +69,43 @@ fi
 
 echo ""
 
-# ── 2. Limpa build anterior ───────────────────────────────────────────────────
-sep
-info "Limpando build anterior..."
-rm -rf .next
-ok ".next removido"
-echo ""
-
-# ── 3. Instala dependências ───────────────────────────────────────────────────
+# ── 2. Instala dependências ───────────────────────────────────────────────────
 sep
 info "Instalando dependências..."
-npm ci --prefer-offline --loglevel=error
+npm install --loglevel=error
 ok "Dependências instaladas"
 echo ""
 
-# ── 4. Build ──────────────────────────────────────────────────────────────────
+# ── 4. Build (com output:standalone temporário) ───────────────────────────────
 sep
-info "Rodando npm run build (inclui postbuild)..."
+info "Ativando output:standalone temporário para build..."
+
+# Garante restauração do next.config.mjs mesmo em caso de falha
+restore_config() {
+  if [ -f next.config.mjs.bak ]; then
+    cp next.config.mjs.bak next.config.mjs
+    rm next.config.mjs.bak
+  fi
+}
+trap restore_config EXIT
+
+cp next.config.mjs next.config.mjs.bak
+node -e "
+  const fs = require('fs');
+  let c = fs.readFileSync('next.config.mjs', 'utf8');
+  c = c.replace(/([ \t]*)(poweredByHeader:)/, '\$1output: \"standalone\",\n\$1\$2');
+  fs.writeFileSync('next.config.mjs', c);
+"
+ok "output:standalone ativado"
+
+info "Rodando npm run build..."
 echo ""
 npm run build
+echo ""
+
+restore_config
+trap - EXIT
+ok "next.config.mjs restaurado"
 echo ""
 
 # ── 5. Copia assets estáticos para standalone ─────────────────────────────────
