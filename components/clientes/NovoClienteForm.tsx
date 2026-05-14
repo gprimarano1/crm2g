@@ -93,6 +93,7 @@ export function NovoClienteForm({ cliente, onSuccess }: NovoClienteFormProps) {
     segmento: cliente?.segmento ?? "",
     status: cliente?.status ?? "ativo",
     data_inicio: cliente?.data_inicio ?? "",
+    meta_page_id: cliente?.meta_page_id ?? "",
     meta_ad_account_id: cliente?.meta_ad_account_id ?? "",
     meta_pixel_id: cliente?.meta_pixel_id ?? "",
     meta_capi_token: cliente?.meta_capi_token ?? "",
@@ -236,6 +237,13 @@ export function NovoClienteForm({ cliente, onSuccess }: NovoClienteFormProps) {
 
       {/* Meta Ads */}
       <FormSection title="Meta Ads" icon={<Megaphone size={16} />} defaultOpen={false}>
+        <Input
+          label="Facebook Page ID"
+          value={form.meta_page_id ?? ""}
+          onChange={set("meta_page_id")}
+          placeholder="123456789"
+          leftIcon={<Hash size={15} />}
+        />
         <Input
           label="Ad Account ID"
           value={form.meta_ad_account_id ?? ""}

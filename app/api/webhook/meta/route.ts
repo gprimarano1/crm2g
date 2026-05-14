@@ -267,9 +267,9 @@ async function fetchLeadData(
 async function processLeadEvent(event: LeadgenValue): Promise<void> {
   const supabase = getAdminClient();
 
-  console.log(`[Webhook Meta] Processando lead leadgen_id=${event.leadgen_id} page_id=${event.page_id} campaign_id=${event.campaign_id}`);
+  console.log(`[Webhook Meta] Processando lead leadgen_id=${event.leadgen_id} page_id=${event.page_id} ad_id=${event.ad_id ?? "N/A"}`);
 
-  // 1. Encontra o cliente pelo page_id
+  // 1. Encontra o cliente: por meta_page_id (primário) ou meta_ad_account_id (fallback)
   let clienteId: string | null = null;
   let accessToken: string | null = null;
 
@@ -282,27 +282,23 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
   if (clienteByPage) {
     clienteId   = clienteByPage.id;
     accessToken = clienteByPage.meta_access_token;
-    console.log(`[Webhook Meta] Cliente encontrado por page_id: ${clienteId}`);
-  } else if (event.campaign_id) {
-    const { data: campanha } = await supabase
-      .from("campanhas")
-      .select("cliente_id, clientes!inner(meta_access_token)")
-      .eq("meta_campaign_id", event.campaign_id)
+    console.log(`[Webhook Meta] Cliente encontrado por meta_page_id: ${clienteId}`);
+  } else if (event.ad_id) {
+    const { data: clienteByAd } = await supabase
+      .from("clientes")
+      .select("id, meta_access_token")
+      .eq("meta_ad_account_id", event.ad_id)
       .maybeSingle();
 
-    if (campanha) {
-      clienteId = campanha.cliente_id;
-      const clientes = campanha.clientes as unknown;
-      const c = (Array.isArray(clientes) ? clientes[0] : clientes) as
-        | { meta_access_token: string | null }
-        | null;
-      accessToken = c?.meta_access_token ?? null;
-      console.log(`[Webhook Meta] Cliente encontrado por campaign_id: ${clienteId}`);
+    if (clienteByAd) {
+      clienteId   = clienteByAd.id;
+      accessToken = clienteByAd.meta_access_token;
+      console.log(`[Webhook Meta] Cliente encontrado por meta_ad_account_id: ${clienteId}`);
     }
   }
 
   if (!clienteId) {
-    const errMsg = `Nenhum cliente para page_id=${event.page_id} campaign_id=${event.campaign_id ?? "N/A"}`;
+    const errMsg = `Nenhum cliente para page_id=${event.page_id} ad_id=${event.ad_id ?? "N/A"}`;
     console.warn(`[Webhook Meta] ${errMsg}`);
     await saveLog("POST", { event }, "sem_cliente", errMsg);
     return;

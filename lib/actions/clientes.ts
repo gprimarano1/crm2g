@@ -21,6 +21,7 @@ export type Cliente = {
   segmento: string | null;
   status: ClienteStatus;
   data_inicio: string | null;
+  meta_page_id: string | null;
   meta_ad_account_id: string | null;
   meta_pixel_id: string | null;
   meta_capi_token: string | null;
@@ -47,6 +48,7 @@ export type ClienteFormData = {
   segmento?: string;
   status?: ClienteStatus;
   data_inicio?: string;
+  meta_page_id?: string;
   meta_ad_account_id?: string;
   meta_pixel_id?: string;
   meta_capi_token?: string;
@@ -117,6 +119,7 @@ export async function createCliente(
       segmento: data.segmento || null,
       status: data.status ?? "ativo",
       data_inicio: data.data_inicio || null,
+      meta_page_id: data.meta_page_id || null,
       meta_ad_account_id: data.meta_ad_account_id || null,
       meta_pixel_id: data.meta_pixel_id || null,
       meta_capi_token: data.meta_capi_token || null,
@@ -151,6 +154,7 @@ export async function updateCliente(
       email: data.email || null,
       segmento: data.segmento || null,
       data_inicio: data.data_inicio || null,
+      meta_page_id: data.meta_page_id || null,
       meta_ad_account_id: data.meta_ad_account_id || null,
       meta_pixel_id: data.meta_pixel_id || null,
       meta_capi_token: data.meta_capi_token || null,
