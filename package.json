@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "node server.js",
     "start:dev": "next start",
     "lint": "next lint",
     "deploy:prepare": "npm run build && echo '\n✅ Build completo. Faça upload de .next/standalone/ para a Hostinger.\nVeja DEPLOY.md para instruções detalhadas.'"
