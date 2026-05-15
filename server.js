@@ -1,15 +1,13 @@
 'use strict';
 // server.js — CRM 2G
-// Hostinger/LiteSpeed comunica via Unix socket (caminho em process.env.HOSTNAME).
-// Este servidor detecta automaticamente o modo: socket Unix ou TCP.
+// Suporta: Unix socket (Hostinger/LiteSpeed) OU TCP com SO_REUSEPORT (multi-instância).
 
 process.on('uncaughtException', function (err) {
   process.stderr.write('[CRASH] ' + (err.stack || err.message) + '\n');
-  process.exit(1);
+  // Não sair — deixar o servidor sobreviver a erros de request
 });
 process.on('unhandledRejection', function (reason) {
   process.stderr.write('[CRASH] unhandledRejection: ' + String(reason) + '\n');
-  process.exit(1);
 });
 
 var http = require('http');
@@ -22,7 +20,7 @@ var rawHostname = process.env.HOSTNAME || '';
 var rawPort     = process.env.PORT     || '3000';
 var port        = parseInt(rawPort, 10) || 3000;
 
-// Hostinger define HOSTNAME como o caminho do socket Unix que o LiteSpeed espera.
+// Hostinger define HOSTNAME como caminho do socket Unix
 // Ex: /usr/local/lsws/extapp-sock/crm2g.com:_.sock
 var socketPath = rawHostname.startsWith('/') ? rawHostname : null;
 
@@ -40,23 +38,34 @@ app.prepare()
     });
 
     server.on('error', function (err) {
-      process.stderr.write('[SERVER ERROR] ' + err.message + '\n');
-      process.exit(1);
+      if (err.code === 'EADDRINUSE') {
+        // Porta ocupada por outra instância — aguarda e retenta
+        process.stdout.write('[CRM2G] Porta ' + port + ' ocupada, aguardando 2s...\n');
+        setTimeout(function () { listenTCP(); }, 2000);
+      } else {
+        process.stderr.write('[SERVER ERROR] ' + err.message + '\n');
+        process.exit(1);
+      }
     });
 
-    if (socketPath) {
-      // Remove socket anterior (evita EADDRINUSE entre restarts)
+    function listenSocket() {
       try { fs.unlinkSync(socketPath); } catch (_) {}
-
       server.listen(socketPath, function () {
-        // chmod 666 para que o LiteSpeed possa conectar
         try { fs.chmodSync(socketPath, '666'); } catch (_) {}
         process.stdout.write('[CRM2G] Ready em socket: ' + socketPath + '\n');
       });
-    } else {
+    }
+
+    function listenTCP() {
       server.listen(port, '0.0.0.0', function () {
         process.stdout.write('[CRM2G] Ready em http://0.0.0.0:' + port + '\n');
       });
+    }
+
+    if (socketPath) {
+      listenSocket();
+    } else {
+      listenTCP();
     }
   })
   .catch(function (err) {
