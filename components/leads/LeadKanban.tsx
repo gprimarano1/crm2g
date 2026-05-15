@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, X, Upload, AlertCircle } from "lucide-react";
+import { ChevronDown, X, Upload, AlertCircle, RefreshCw } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -467,7 +467,7 @@ function KanbanColumn({
 }) {
   return (
     <div className={cn(
-      "flex min-w-[272px] flex-1 flex-col rounded-2xl border border-t-2 bg-bg-surface",
+      "flex min-w-[175px] flex-1 flex-col rounded-2xl border border-t-2 bg-bg-surface",
       col.topBorder,
       "border-bg-border"
     )}>
@@ -543,6 +543,7 @@ export function LeadKanban({
   const [leads, setLeads]           = useState<Lead[]>(initialLeads);
   const [newLeadIds, setNewLeadIds] = useState<Set<string>>(new Set());
   const [modal, setModal]           = useState<ModalState>({ type: null });
+  const [refreshing, setRefreshing] = useState(false);
 
   // Panel state
   const [selectedLead, setSelectedLead]   = useState<Lead | null>(null);
@@ -611,31 +612,46 @@ export function LeadKanban({
 
   // ── Navigate to different cliente ───────────────────────────
 
-  function navigateToCliente(clienteId: string) {
-    const p = new URLSearchParams({ cliente_id: clienteId });
+  function navigateToCliente(id: string) {
+    const p = new URLSearchParams({ cliente_id: id });
     router.push(`${pathname}?${p.toString()}`);
+  }
+
+  function handleRefresh() {
+    setRefreshing(true);
+    router.refresh();
+    setTimeout(() => setRefreshing(false), 800);
   }
 
   return (
     <div className="flex flex-1 flex-col gap-4 min-h-0">
-      {/* Cliente selector */}
-      {showClientSelector && clientes.length > 0 && (
-        <div className="relative inline-flex">
-          <select
-            defaultValue={clienteId}
-            onChange={(e) => navigateToCliente(e.target.value)}
-            className="h-9 appearance-none rounded-xl border border-bg-border bg-bg-surface2 pl-3 pr-8 text-sm text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 cursor-pointer"
-          >
-            {clientes.map((c) => (
-              <option key={c.id} value={c.id}>{c.nome_empresa}</option>
-            ))}
-          </select>
-          <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
-        </div>
-      )}
+      {/* Toolbar: cliente selector + refresh button */}
+      <div className="flex items-center gap-2">
+        {showClientSelector && clientes.length > 0 && (
+          <div className="relative inline-flex">
+            <select
+              defaultValue={clienteId}
+              onChange={(e) => navigateToCliente(e.target.value)}
+              className="h-9 appearance-none rounded-xl border border-bg-border bg-bg-surface2 pl-3 pr-8 text-sm text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent/15 cursor-pointer"
+            >
+              {clientes.map((c) => (
+                <option key={c.id} value={c.id}>{c.nome_empresa}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
+          </div>
+        )}
+        <button
+          onClick={handleRefresh}
+          className="flex h-9 items-center gap-1.5 rounded-xl border border-bg-border bg-bg-surface2 px-3 text-xs font-medium text-text-muted transition-colors hover:bg-bg-surface hover:text-text"
+        >
+          <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />
+          Atualizar
+        </button>
+      </div>
 
       {/* Kanban board */}
-      <div className="flex gap-3 overflow-x-auto pb-4">
+      <div className="flex gap-2 overflow-x-auto pb-4">
         {KANBAN_COLS.map((col) => (
           <KanbanColumn
             key={col.id}

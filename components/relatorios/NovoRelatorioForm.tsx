@@ -2,14 +2,79 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronDown, Sparkles, Check, Copy, ExternalLink } from "lucide-react";
+import { ChevronDown, Sparkles, Check, Copy, ExternalLink, Calendar } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { criarRelatorio, getInsightsParaCliente } from "@/lib/actions/relatorios";
 import type { InsightOption } from "@/lib/actions/relatorios";
 
 // ================================================================
-// Helpers
+// Period helpers
+// ================================================================
+
+type PeriodoPreset =
+  | "esta_semana"
+  | "semana_passada"
+  | "este_mes"
+  | "mes_passado"
+  | "30d"
+  | "custom";
+
+const PERIODOS: Array<{ value: PeriodoPreset; label: string }> = [
+  { value: "esta_semana",    label: "Esta semana" },
+  { value: "semana_passada", label: "Semana passada" },
+  { value: "este_mes",       label: "Este mês" },
+  { value: "mes_passado",    label: "Mês passado" },
+  { value: "30d",            label: "Últimos 30 dias" },
+  { value: "custom",         label: "Personalizado" },
+];
+
+function toStr(d: Date): string {
+  return d.toISOString().split("T")[0];
+}
+
+function computePeriod(
+  preset: PeriodoPreset,
+  customInicio: string,
+  customFim: string,
+): { inicio: string; fim: string } {
+  const today = new Date();
+  const todayStr = toStr(today);
+  const dow = today.getDay(); // 0=Dom
+
+  switch (preset) {
+    case "esta_semana": {
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1));
+      return { inicio: toStr(monday), fim: todayStr };
+    }
+    case "semana_passada": {
+      const monday = new Date(today);
+      monday.setDate(today.getDate() - (dow === 0 ? 6 : dow - 1) - 7);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      return { inicio: toStr(monday), fim: toStr(sunday) };
+    }
+    case "este_mes": {
+      const first = new Date(today.getFullYear(), today.getMonth(), 1);
+      return { inicio: toStr(first), fim: todayStr };
+    }
+    case "mes_passado": {
+      const first = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+      const last  = new Date(today.getFullYear(), today.getMonth(), 0);
+      return { inicio: toStr(first), fim: toStr(last) };
+    }
+    case "30d": {
+      const start = new Date(today.getTime() - 29 * 86400000);
+      return { inicio: toStr(start), fim: todayStr };
+    }
+    case "custom":
+      return { inicio: customInicio, fim: customFim };
+  }
+}
+
+// ================================================================
+// Sub-components
 // ================================================================
 
 function SelectField({
@@ -47,12 +112,6 @@ function SelectField({
 // NovoRelatorioForm
 // ================================================================
 
-interface Semana {
-  inicio: string;
-  fim:    string;
-  label:  string;
-}
-
 interface Cliente {
   id:           string;
   nome_empresa: string;
@@ -60,24 +119,27 @@ interface Cliente {
 
 interface Props {
   clientes: Cliente[];
-  semanas:  Semana[];
   baseUrl:  string;
 }
 
-export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
+export function NovoRelatorioForm({ clientes, baseUrl }: Props) {
   const router = useRouter();
 
-  const [clienteId,   setClienteId]   = useState(clientes[0]?.id ?? "");
-  const [semanaIdx,   setSemanaIdx]   = useState("0");
-  const [insightId,   setInsightId]   = useState<string>("");
-  const [insights,    setInsights]    = useState<InsightOption[]>([]);
-  const [loadingIns,  setLoadingIns]  = useState(false);
-  const [generating,  startGenerating] = useTransition();
-  const [slug,        setSlug]        = useState<string | null>(null);
-  const [error,       setError]       = useState<string | null>(null);
-  const [copied,      setCopied]      = useState(false);
+  const [clienteId,    setClienteId]    = useState(clientes[0]?.id ?? "");
+  const [periodo,      setPeriodo]      = useState<PeriodoPreset>("esta_semana");
+  const [customInicio, setCustomInicio] = useState("");
+  const [customFim,    setCustomFim]    = useState("");
+  const [insightId,    setInsightId]    = useState<string>("");
+  const [insights,     setInsights]     = useState<InsightOption[]>([]);
+  const [loadingIns,   setLoadingIns]   = useState(false);
+  const [generating,   startGenerating] = useTransition();
+  const [slug,         setSlug]         = useState<string | null>(null);
+  const [error,        setError]        = useState<string | null>(null);
+  const [copied,       setCopied]       = useState(false);
 
-  const semana = semanas[Number(semanaIdx)];
+  const periodoComp = computePeriod(periodo, customInicio, customFim);
+  const periodoValido =
+    periodo !== "custom" || (!!customInicio && !!customFim && customInicio <= customFim);
 
   // ---- Load insights when client changes ----
   async function handleClienteChange(id: string) {
@@ -96,13 +158,13 @@ export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
 
   // ---- Generate ----
   function handleGenerate() {
-    if (!clienteId || !semana) return;
+    if (!clienteId || !periodoValido) return;
     setError(null);
     startGenerating(async () => {
       const result = await criarRelatorio({
         clienteId,
-        periodoInicio: semana.inicio,
-        periodoFim:    semana.fim,
+        periodoInicio: periodoComp.inicio,
+        periodoFim:    periodoComp.fim,
         insightId:     insightId || null,
       });
       if (result.success && result.slug) {
@@ -171,31 +233,61 @@ export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
         </div>
       ) : (
         <>
-          {/* Form */}
           <div className="rounded-2xl border border-bg-border bg-bg-surface p-5 flex flex-col gap-4">
-            <SelectField
-              label="Cliente"
-              value={clienteId}
-              onChange={handleClienteChange}
-            >
+            {/* Cliente */}
+            <SelectField label="Cliente" value={clienteId} onChange={handleClienteChange}>
               <option value="">Selecione um cliente...</option>
               {clientes.map((c) => (
                 <option key={c.id} value={c.id}>{c.nome_empresa}</option>
               ))}
             </SelectField>
 
-            <SelectField
-              label="Semana"
-              value={semanaIdx}
-              onChange={setSemanaIdx}
-            >
-              {semanas.map((s, i) => (
-                <option key={s.inicio} value={String(i)}>
-                  {i === 0 ? `Esta semana — ${s.label}` : s.label}
-                </option>
-              ))}
-            </SelectField>
+            {/* Período */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium text-text-muted">Período</label>
 
+              {/* Botões de preset */}
+              <div className="flex flex-wrap gap-1.5">
+                {PERIODOS.map((p) => (
+                  <button
+                    key={p.value}
+                    type="button"
+                    onClick={() => setPeriodo(p.value)}
+                    className={cn(
+                      "flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all",
+                      periodo === p.value
+                        ? "border-accent/40 bg-accent/10 text-accent"
+                        : "border-bg-border bg-bg-surface2 text-text-muted hover:border-accent/20 hover:text-text"
+                    )}
+                  >
+                    {p.value === "custom" && <Calendar size={11} />}
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Date picker para personalizado */}
+              {periodo === "custom" && (
+                <div className="mt-1 flex items-center gap-2 flex-wrap">
+                  <input
+                    type="date"
+                    value={customInicio}
+                    onChange={(e) => setCustomInicio(e.target.value)}
+                    className="h-9 rounded-xl border border-bg-border bg-bg-surface2 px-3 text-sm text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  />
+                  <span className="text-sm text-text-subtle">→</span>
+                  <input
+                    type="date"
+                    value={customFim}
+                    onChange={(e) => setCustomFim(e.target.value)}
+                    min={customInicio}
+                    className="h-9 rounded-xl border border-bg-border bg-bg-surface2 px-3 text-sm text-text outline-none focus:border-accent focus:ring-2 focus:ring-accent/15"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Insights IA */}
             <SelectField
               label="Insights da IA (opcional)"
               value={insightId}
@@ -207,9 +299,7 @@ export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
                 const dt = new Date(ins.created_at).toLocaleDateString("pt-BR", {
                   day: "2-digit", month: "2-digit", year: "2-digit",
                 });
-                const label = ins.periodo
-                  ? `${ins.periodo} — ${dt}`
-                  : `Gerado em ${dt}`;
+                const label = ins.periodo ? `${ins.periodo} — ${dt}` : `Gerado em ${dt}`;
                 return <option key={ins.id} value={ins.id}>{label}</option>;
               })}
               {clienteId && !loadingIns && insights.length === 0 && (
@@ -217,15 +307,15 @@ export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
               )}
             </SelectField>
 
-            {/* Period preview */}
-            {clienteId && semana && (
+            {/* Preview do período */}
+            {clienteId && periodoValido && (
               <div className="rounded-xl border border-bg-border bg-bg-surface2 p-3">
                 <p className="text-xs font-semibold uppercase tracking-wide text-text-subtle mb-2">
                   Preview do período
                 </p>
                 <div className="flex gap-4 text-xs text-text-muted">
-                  <span>Início: <span className="text-text font-medium">{semana.inicio}</span></span>
-                  <span>Fim: <span className="text-text font-medium">{semana.fim}</span></span>
+                  <span>Início: <span className="text-text font-medium">{periodoComp.inicio}</span></span>
+                  <span>Fim: <span className="text-text font-medium">{periodoComp.fim}</span></span>
                 </div>
                 <p className="mt-1 text-[11px] text-text-subtle">
                   Leads, campanhas e métricas do período serão incluídos no snapshot.
@@ -243,7 +333,7 @@ export function NovoRelatorioForm({ clientes, semanas, baseUrl }: Props) {
           <Button
             onClick={handleGenerate}
             loading={generating}
-            disabled={!clienteId || !semana}
+            disabled={!clienteId || !periodoValido}
             icon={<Sparkles size={15} />}
           >
             {generating ? "Gerando relatório…" : "Gerar Relatório"}

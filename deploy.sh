@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # =============================================================================
-# deploy.sh — Build + push para branch production (Hostinger Git Deploy)
-# Uso: ./deploy.sh
+# deploy.sh — Build local + push para branch production (Hostinger Git Deploy)
+#
+# Estratégia: commit .next/ pré-buildado + package-lock.json
+# A Hostinger roda: npm ci --omit=dev  (instala node_modules Linux-nativos)
+#                   node server.js      (custom server lê o .next/ pré-buildado)
 # =============================================================================
 
 set -euo pipefail
@@ -25,9 +28,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # ── Configurações ─────────────────────────────────────────────────────────────
-STANDALONE_DIR=".next/standalone"
 DEPLOY_BRANCH="production"
 REQUIRED_NODE_MAJOR=18
+NEXT_DIR=".next"
 
 # =============================================================================
 sep
@@ -49,188 +52,195 @@ if [ "$NODE_MAJOR" -lt "$REQUIRED_NODE_MAJOR" ]; then
 fi
 ok "Node.js $(node -v) / npm $(npm -v)"
 
-# Verifica remote origin
 if ! git remote get-url origin >/dev/null 2>&1; then
   fail "Remote 'origin' não configurado. Rode: git remote add origin https://github.com/gprimarano1/crm2g.git"
 fi
 ok "Remote origin: $(git remote get-url origin)"
 
-# Verifica branch atual
 CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
 if [ "$CURRENT_BRANCH" = "$DEPLOY_BRANCH" ]; then
   fail "Você está na branch '$DEPLOY_BRANCH'. Volte para 'main' antes de fazer deploy."
 fi
 ok "Branch atual: $CURRENT_BRANCH"
 
-# Verifica .env.local
 if [ ! -f ".env.local" ]; then
   warn ".env.local não encontrado. Configure as env vars no hPanel da Hostinger."
 fi
 
 echo ""
 
-# ── 2. Instala dependências ───────────────────────────────────────────────────
+# ── 2. Instala dependências locais (para o build) ─────────────────────────────
 sep
 info "Instalando dependências..."
 npm install --loglevel=error
 ok "Dependências instaladas"
 echo ""
 
-# ── 4. Build (com output:standalone temporário) ───────────────────────────────
+# ── 3. Build normal (sem output:standalone) ───────────────────────────────────
 sep
-info "Ativando output:standalone temporário para build..."
-
-# Garante restauração do next.config.mjs mesmo em caso de falha
-restore_config() {
-  if [ -f next.config.mjs.bak ]; then
-    cp next.config.mjs.bak next.config.mjs
-    rm next.config.mjs.bak
-  fi
-}
-trap restore_config EXIT
-
-cp next.config.mjs next.config.mjs.bak
-node -e "
-  const fs = require('fs');
-  let c = fs.readFileSync('next.config.mjs', 'utf8');
-  c = c.replace(/([ \t]*)(poweredByHeader:)/, '\$1output: \"standalone\",\n\$1\$2');
-  fs.writeFileSync('next.config.mjs', c);
-"
-ok "output:standalone ativado"
-
 info "Rodando npm run build..."
 echo ""
 npm run build
 echo ""
 
-restore_config
-trap - EXIT
-ok "next.config.mjs restaurado"
+# Valida que o build gerou chunks reais (build saudável)
+if [ ! -d "$NEXT_DIR/server/chunks" ]; then
+  fail "Build falhou — .next/server/chunks/ não encontrado."
+fi
+CHUNK_COUNT=$(ls "$NEXT_DIR/server/chunks/" | wc -l | tr -d ' ')
+[ "$CHUNK_COUNT" -gt 0 ] || fail "Build falhou — nenhum chunk gerado."
+ok "Build OK ($CHUNK_COUNT chunks em .next/server/chunks/)"
 echo ""
 
-# ── 5. Copia assets estáticos para standalone ─────────────────────────────────
+# ── 4. Prepara diretório de deploy ────────────────────────────────────────────
 sep
-info "Copiando assets estáticos para standalone..."
-[ -d "$STANDALONE_DIR" ] || fail "$STANDALONE_DIR não gerado."
-[ -f "$STANDALONE_DIR/server.js" ] || fail "server.js não encontrado."
-
-# Next.js não copia automaticamente — precisa copiar manualmente
-cp -r ".next/static" "$STANDALONE_DIR/.next/static"
-cp -r "public" "$STANDALONE_DIR/public"
-
-[ -d "$STANDALONE_DIR/.next/static" ] || fail ".next/static não copiado."
-[ -d "$STANDALONE_DIR/public" ]        || fail "public/ não copiado."
-ok "Estrutura standalone OK"
-echo ""
-
-# ── 6. Prepara branch production ─────────────────────────────────────────────
-sep
-info "Preparando branch '$DEPLOY_BRANCH'..."
+info "Preparando arquivos de produção..."
 
 TEMP_DIR=$(mktemp -d)
-cp -r "$STANDALONE_DIR/." "$TEMP_DIR/"
 
-# Injeta error handlers no início do server.js para capturar crashes no stdout
-ORIGINAL_SERVER=$(cat "$TEMP_DIR/server.js")
+# Copia .next/ completo e remove apenas o webpack cache (pesado, não necessário)
+cp -r "$NEXT_DIR" "$TEMP_DIR/.next"
+rm -rf "$TEMP_DIR/.next/cache/webpack" "$TEMP_DIR/.next/cache/fetch"
+
+# Copia public/
+cp -r "public" "$TEMP_DIR/public"
+
+# package.json de produção: mesmas deps, scripts simplificados
+node -e "
+  const fs = require('fs');
+  const pkg = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+  pkg.scripts = {
+    build: \"echo 'pre-built — skipping'\",
+    start: 'node server.js'
+  };
+  fs.writeFileSync('$TEMP_DIR/package.json', JSON.stringify(pkg, null, 2));
+"
+
+# next.config.mjs — necessário para next start ler a configuração
+[ -f "next.config.mjs" ] && cp "next.config.mjs" "$TEMP_DIR/next.config.mjs"
+
+# package-lock.json — necessário para npm ci na Hostinger
+[ -f "package-lock.json" ] && cp "package-lock.json" "$TEMP_DIR/package-lock.json" \
+  || warn "package-lock.json não encontrado — Hostinger vai usar npm install"
+
+# .gitignore mínimo (não commita node_modules nem .env)
+cat > "$TEMP_DIR/.gitignore" << 'GITEOF'
+.DS_Store
+*.local
+.env.local
+node_modules/.cache
+GITEOF
+
+# server.js — diagnóstico + next start com hostname fixo
 cat > "$TEMP_DIR/server.js" << 'SERVEREOF'
-// ── Error handlers (injected by deploy.sh) ──
+'use strict';
+
 process.on('uncaughtException', function(err) {
-  process.stdout.write('[CRASH uncaughtException] ' + err.message + '\n' + (err.stack || '') + '\n');
+  process.stdout.write('[CRASH] ' + err.message + '\n' + (err.stack || '') + '\n');
   process.exit(1);
 });
 process.on('unhandledRejection', function(reason) {
-  process.stdout.write('[CRASH unhandledRejection] ' + String(reason) + '\n');
+  process.stdout.write('[CRASH] unhandledRejection: ' + String(reason) + '\n');
   process.exit(1);
 });
-process.stdout.write('[STARTUP] server.js iniciando...\n');
-SERVEREOF
-echo "$ORIGINAL_SERVER" >> "$TEMP_DIR/server.js"
 
-# Cria .gitignore mínimo para a branch de produção
-cat > "$TEMP_DIR/.gitignore" << 'EOF'
-.DS_Store
-*.local
-EOF
+// --- Diagnóstico de ambiente ---
+var rawPort = process.env.PORT || '3000';
+process.stdout.write('[ENV] PORT=' + rawPort + '\n');
+process.stdout.write('[ENV] HOSTNAME=' + (process.env.HOSTNAME || '(não definido)') + '\n');
+process.stdout.write('[ENV] NODE_ENV=' + (process.env.NODE_ENV || '(não definido)') + '\n');
+process.stdout.write('[ENV] __dirname=' + __dirname + '\n');
 
-# Cria package.json mínimo para a Hostinger saber o entry point
-# "build" é no-op: app já veio buildado, Hostinger só precisa do script existir
-cat > "$TEMP_DIR/package.json" << 'EOF'
-{
-  "name": "crm2g",
-  "version": "0.1.0",
-  "private": true,
-  "scripts": {
-    "build": "echo 'App already built — skipping'",
-    "start": "node server.js"
-  }
+var spawn = require('child_process').spawn;
+var path  = require('path');
+var fs    = require('fs');
+
+var nextBin = path.join(__dirname, 'node_modules', '.bin', 'next');
+
+// Verifica existência do binário next e do BUILD_ID
+process.stdout.write('[CHECK] next bin: ' + (fs.existsSync(nextBin) ? 'OK' : 'NAO ENCONTRADO') + '\n');
+process.stdout.write('[CHECK] .next/BUILD_ID: ' + (fs.existsSync(path.join(__dirname, '.next', 'BUILD_ID')) ? 'OK' : 'NAO ENCONTRADO') + '\n');
+
+// Porta: se PORT for caminho de socket ou NaN, usa 3000
+var port = parseInt(rawPort, 10);
+if (isNaN(port) || port < 1) {
+  process.stdout.write('[WARN] PORT invalido ("' + rawPort + '"), usando 3000\n');
+  port = 3000;
 }
-EOF
+
+// Hostname: NUNCA usa process.env.HOSTNAME (Hostinger define como caminho de socket Unix)
+// Sempre escuta em 0.0.0.0 para todas as interfaces
+var hostname = '0.0.0.0';
+
+process.stdout.write('[STARTUP] Iniciando: next start -p ' + port + ' -H ' + hostname + '\n');
+
+var child = spawn(nextBin, ['start', '-p', String(port), '-H', hostname], {
+  cwd: __dirname,
+  stdio: ['ignore', 'inherit', 'inherit'],
+  env: process.env,
+});
+
+child.on('error', function(err) {
+  process.stdout.write('[FATAL] Falha ao iniciar next: ' + err.message + '\n');
+  process.exit(1);
+});
+
+child.on('exit', function(code, signal) {
+  process.stdout.write('[EXIT] next terminou — code=' + code + ' signal=' + signal + '\n');
+  process.exit(code != null ? code : 1);
+});
+SERVEREOF
 
 ok "Arquivos de produção prontos"
 echo ""
 
-# ── 7. Push para branch production ───────────────────────────────────────────
+# ── 5. Push para branch production ───────────────────────────────────────────
 sep
 info "Fazendo push para branch '$DEPLOY_BRANCH'..."
 
-ORIGINAL_DIR="$SCRIPT_DIR"
+REMOTE_URL=$(git remote get-url origin)
 
 cd "$TEMP_DIR"
 git init -q
 git checkout -b "$DEPLOY_BRANCH"
 git add -A
+git add -f ".next"    # força: ~/.gitignore_global do macOS exclui .next silenciosamente
 git commit -q -m "deploy: $(date '+%Y-%m-%d %H:%M') — $CURRENT_BRANCH"
 
-REMOTE_URL=$(cd "$ORIGINAL_DIR" && git remote get-url origin)
 git remote add origin "$REMOTE_URL"
 git push origin "$DEPLOY_BRANCH" --force -q
 
-cd "$ORIGINAL_DIR"
+cd "$SCRIPT_DIR"
 rm -rf "$TEMP_DIR"
 
 ok "Branch '$DEPLOY_BRANCH' atualizada no GitHub"
 echo ""
 
-# ── 8. Também cria deploy.zip (backup / upload manual) ───────────────────────
+# ── 6. Resumo ─────────────────────────────────────────────────────────────────
 sep
-info "Gerando deploy.zip (backup para upload manual)..."
-
-if command -v zip >/dev/null 2>&1; then
-  (
-    cd "$STANDALONE_DIR"
-    zip -r "../../deploy.zip" . \
-      --exclude "*.DS_Store" \
-      --exclude "*/__pycache__/*" \
-      -q
-  )
-  ZIP_SIZE=$(du -sh "deploy.zip" | cut -f1)
-  ok "deploy.zip gerado ($ZIP_SIZE)"
-else
-  warn "zip não encontrado — pulando geração do deploy.zip"
-fi
-echo ""
-
-# ── 9. Resumo ─────────────────────────────────────────────────────────────────
-sep
-STANDALONE_SIZE=$(du -sh "$STANDALONE_DIR" | cut -f1)
+NEXT_SIZE=$(du -sh "$NEXT_DIR/server" | cut -f1)
 
 echo -e "${BOLD}  Deploy concluído!${RESET}"
 echo ""
-echo -e "  Build   : ${CYAN}$STANDALONE_SIZE${RESET}"
-echo -e "  Branch  : ${CYAN}$DEPLOY_BRANCH${RESET}  (Hostinger aponta aqui)"
-echo -e "  Commit  : $(git ls-remote origin $DEPLOY_BRANCH 2>/dev/null | cut -c1-7 || echo 'ver GitHub')"
+echo -e "  Build server : ${CYAN}$NEXT_SIZE${RESET}"
+echo -e "  Branch       : ${CYAN}$DEPLOY_BRANCH${RESET}  (Hostinger aponta aqui)"
+echo -e "  Commit       : $(git ls-remote origin $DEPLOY_BRANCH 2>/dev/null | cut -c1-7 || echo 'ver GitHub')"
 echo ""
 sep
-echo -e "${BOLD}  Configuração Hostinger (apenas 1ª vez)${RESET}"
+echo -e "${BOLD}  Configuração Hostinger (verifique estas configurações!)${RESET}"
 sep
 echo ""
 echo "  hPanel → Node.js → Seu app:"
-echo "  ┌─────────────────────────────────────────────┐"
-echo "  │ Git repository : github.com/gprimarano1/crm2g │"
-echo "  │ Branch         : production                  │"
-echo "  │ Startup file   : server.js                   │"
-echo "  │ Node.js version: 20.x                        │"
-echo "  └─────────────────────────────────────────────┘"
+echo "  ┌──────────────────────────────────────────────────┐"
+echo "  │ Git repository  : github.com/gprimarano1/crm2g  │"
+echo "  │ Branch          : production                     │"
+echo "  │ Build command   : npm ci --omit=dev              │"
+echo "  │ Startup file    : server.js                      │"
+echo "  │ Node.js version : 20.x                           │"
+echo "  └──────────────────────────────────────────────────┘"
+echo ""
+echo "  IMPORTANTE: Build command deve ser 'npm ci --omit=dev'"
+echo "  (instala node_modules Linux-nativos; NÃO rebuilda o app)"
 echo ""
 echo "  Env vars no hPanel:"
 echo "    NODE_ENV=production"
@@ -240,6 +250,8 @@ echo "    NEXT_PUBLIC_SUPABASE_URL=..."
 echo "    NEXT_PUBLIC_SUPABASE_ANON_KEY=..."
 echo "    SUPABASE_SERVICE_ROLE_KEY=..."
 echo "    ANTHROPIC_API_KEY=..."
+echo "    META_WEBHOOK_VERIFY_TOKEN=..."
+echo "    META_APP_SECRET=..."
 echo ""
 echo "  Para deploys futuros: ./deploy.sh"
 echo ""

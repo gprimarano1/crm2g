@@ -52,7 +52,7 @@ function ActionBtn({
     <button
       onClick={onClick}
       className={cn(
-        "flex h-8 flex-1 items-center justify-center rounded-xl border text-[11px] font-semibold transition-colors",
+        "flex h-7 flex-1 items-center justify-center rounded-lg border text-[10px] font-semibold transition-colors",
         styles[color]
       )}
     >
@@ -85,7 +85,7 @@ export function LeadKanbanCard({ lead, isNew = false, onAction, onClick }: LeadK
     <div
       onClick={onClick}
       className={cn(
-        "cursor-pointer rounded-2xl border bg-bg-surface p-3.5 transition-all duration-200",
+        "cursor-pointer rounded-xl border bg-bg-surface p-2.5 transition-all duration-200",
         "hover:border-accent/25 hover:shadow-[0_0_0_1px_rgba(91,110,245,0.1)]",
         isNew
           ? "border-accent/40 bg-accent/5"

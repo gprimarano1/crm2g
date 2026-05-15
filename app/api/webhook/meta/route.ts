@@ -209,6 +209,12 @@ interface MetaFieldData {
   values: string[];
 }
 
+interface MetaLeadData {
+  id: string;
+  created_time: string;
+  field_data: MetaFieldData[];
+}
+
 // ================================================================
 // Helpers
 // ================================================================
@@ -252,12 +258,14 @@ function parseFieldData(fields: MetaFieldData[]): {
 async function fetchLeadData(
   leadgenId: string,
   accessToken: string
-): Promise<MetaFieldData[]> {
-  const url = `https://graph.facebook.com/${META_API_VERSION}/${leadgenId}?fields=field_data&access_token=${accessToken}`;
+): Promise<MetaLeadData> {
+  const url = `https://graph.facebook.com/${META_API_VERSION}/${leadgenId}?fields=id,created_time,field_data&access_token=${accessToken}`;
   const res = await fetch(url, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Meta API: ${res.status}`);
-  const data = await res.json() as { field_data?: MetaFieldData[] };
-  return data.field_data ?? [];
+  const json = await res.json() as MetaLeadData & { error?: { message: string; code: number } };
+  if (!res.ok || json.error) {
+    throw new Error(`Meta API ${res.status}: ${json.error?.message ?? JSON.stringify(json)}`);
+  }
+  return json;
 }
 
 // ================================================================
@@ -304,12 +312,15 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
     return;
   }
 
-  // 2. Busca dados do lead na API Meta
-  let fieldData: MetaFieldData[] = [];
+  // 2. Busca dados completos do lead na API Meta
+  let leadData: MetaLeadData | null = null;
   if (accessToken) {
     try {
-      fieldData = await fetchLeadData(event.leadgen_id, accessToken);
-      console.log(`[Webhook Meta] Field data do lead:`, JSON.stringify(fieldData));
+      leadData = await fetchLeadData(event.leadgen_id, accessToken);
+      console.log(
+        `[Webhook Meta] Lead data: id=${leadData.id} created_time=${leadData.created_time}`,
+        JSON.stringify(leadData.field_data),
+      );
     } catch (err) {
       console.error(`[Webhook Meta] Erro ao buscar lead ${event.leadgen_id}:`, err);
       await saveLog("POST", { event, erro: String(err) }, "erro_fetch_lead", String(err));
@@ -318,7 +329,7 @@ async function processLeadEvent(event: LeadgenValue): Promise<void> {
     console.warn(`[Webhook Meta] Sem access token para cliente ${clienteId}`);
   }
 
-  const { nome, telefone, email } = parseFieldData(fieldData);
+  const { nome, telefone, email } = parseFieldData(leadData?.field_data ?? []);
   console.log(`[Webhook Meta] Lead parseado: nome=${nome} tel=${telefone} email=${email}`);
 
   // 3. Salva na tabela leads (ignora duplicata por meta_lead_id unique)

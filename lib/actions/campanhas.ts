@@ -71,7 +71,8 @@ type ActionResult<T = void> =
 // ================================================================
 
 export async function syncClienteCampanhas(
-  clienteId: string
+  clienteId: string,
+  customDateRange?: DateRange
 ): Promise<SyncResult> {
   const supabase = await createAdminClient();
 
@@ -94,7 +95,7 @@ export async function syncClienteCampanhas(
     };
   }
 
-  const dateRange: DateRange = {
+  const dateRange: DateRange = customDateRange ?? {
     since: format(subDays(new Date(), 7), "yyyy-MM-dd"),
     until: format(new Date(), "yyyy-MM-dd"),
   };
@@ -164,9 +165,10 @@ export async function syncClienteCampanhas(
 // ================================================================
 
 export async function syncCampanhasAction(
-  clienteId: string
+  clienteId: string,
+  dateRange?: DateRange
 ): Promise<ActionResult<{ campaigns: number }>> {
-  const result = await syncClienteCampanhas(clienteId);
+  const result = await syncClienteCampanhas(clienteId, dateRange);
 
   if (!result.success) {
     return { success: false, error: result.error };

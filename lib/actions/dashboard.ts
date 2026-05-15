@@ -32,12 +32,20 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .order("nome_empresa");
   if (clienteId) clientesQ = clientesQ.eq("id", clienteId);
 
-  // Investimento: campanhas ativas — gasto_total é cumulativo, sem filtro de data
-  let campanhasQ = supabase
+  // Campanhas para KPIs: filtradas pelo período (overlap entre periodo_inicio/fim e o range selecionado)
+  let campanhasKpiQ = supabase
+    .from("campanhas")
+    .select("cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status, periodo_inicio, periodo_fim")
+    .gte("periodo_fim",    dateFromStr)   // termina no/após início do range
+    .lte("periodo_inicio", dateToStr);   // começa no/antes do fim do range
+  if (clienteId) campanhasKpiQ = campanhasKpiQ.eq("cliente_id", clienteId);
+
+  // Campanhas para alertas: sempre ativas, sem filtro de data
+  let campanhasAlertasQ = supabase
     .from("campanhas")
     .select("cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status")
     .eq("status", "ativa");
-  if (clienteId) campanhasQ = campanhasQ.eq("cliente_id", clienteId);
+  if (clienteId) campanhasAlertasQ = campanhasAlertasQ.eq("cliente_id", clienteId);
 
   // Leads: filtrados pelo período selecionado
   let leadsQ = supabase
@@ -47,7 +55,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .lt("created_at",  dateToIso);
   if (clienteId) leadsQ = leadsQ.eq("cliente_id", clienteId);
 
-  // Métricas manuais: filtradas pelo período (nova schema individual)
+  // Métricas manuais: filtradas pelo período
   let metricasQ = supabase
     .from("metricas_manuais")
     .select("cliente_id, tipo, quantidade, valor, data_registro")
@@ -55,14 +63,15 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .lt("data_registro",  dateToStr);
   if (clienteId) metricasQ = metricasQ.eq("cliente_id", clienteId);
 
-  const [clientesRes, campanhasRes, leadsRes, metricasRes] = await Promise.all([
-    clientesQ, campanhasQ, leadsQ, metricasQ,
+  const [clientesRes, campanhasKpiRes, campanhasAlertasRes, leadsRes, metricasRes] = await Promise.all([
+    clientesQ, campanhasKpiQ, campanhasAlertasQ, leadsQ, metricasQ,
   ]);
 
-  const clientes  = clientesRes.data  ?? [];
-  const campanhas = campanhasRes.data ?? [];
-  const leads     = leadsRes.data     ?? [];
-  const metricas  = metricasRes.data  ?? [];
+  const clientes         = clientesRes.data        ?? [];
+  const campanhas        = campanhasKpiRes.data     ?? [];
+  const campanhasAlertas = campanhasAlertasRes.data ?? [];
+  const leads            = leadsRes.data            ?? [];
+  const metricas         = metricasRes.data         ?? [];
 
   // ── KPIs ─────────────────────────────────────────────────────
 
@@ -87,7 +96,7 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
 
   const alerts: DashboardAlert[] = [];
 
-  for (const camp of campanhas) {
+  for (const camp of campanhasAlertas) {
     const nomeCliente = clienteMap[camp.cliente_id] ?? "?";
 
     if ((camp.frequencia ?? 0) > 2.5) {

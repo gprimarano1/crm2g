@@ -39,14 +39,16 @@ export async function POST(request: NextRequest) {
     }
 
     const results = await Promise.allSettled(
-      clientes.map((c) => syncClienteCampanhas(c.id))
+      clientes.map((c: { id: string }) => syncClienteCampanhas(c.id))
     );
 
-    const summary = results.reduce(
-      (acc, r) => {
+    type SyncSummary = { synced: number; errors: number; campaigns: number };
+    type SyncResult  = { success: boolean; campaigns?: number; error?: string };
+    const summary: SyncSummary = (results as PromiseSettledResult<SyncResult>[]).reduce(
+      (acc: SyncSummary, r: PromiseSettledResult<SyncResult>) => {
         if (r.status === "fulfilled" && r.value.success) {
           acc.synced++;
-          acc.campaigns += (r.value as { success: true; campaigns: number }).campaigns;
+          acc.campaigns += r.value.campaigns ?? 0;
         } else {
           acc.errors++;
         }

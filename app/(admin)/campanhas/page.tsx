@@ -97,6 +97,7 @@ export default async function CampanhasPage({ searchParams }: PageProps) {
             />
           ) : (
             <Suspense
+              key={`${clienteId}-${statusFiltro}`}
               fallback={
                 <div className="h-64 animate-pulse rounded-2xl border border-bg-border bg-bg-surface" />
               }
