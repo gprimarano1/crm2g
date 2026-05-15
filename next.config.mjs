@@ -95,6 +95,13 @@ const nextConfig = {
   compress:          true,   // Gzip/Brotli
   reactStrictMode:   true,
 
+  // Desactiva telemetria e limita workers para economizar memória
+  // em ambientes de hosting partilhado (Hostinger shared)
+  experimental: {
+    workerThreads: false,
+    cpus: 1,
+  },
+
   // ================================================================
   // Redirects: www → apex
   // ================================================================
