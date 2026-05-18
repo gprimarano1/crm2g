@@ -226,7 +226,7 @@ async function transitionLeadStatus(
 
   const { data: updatedLead, error: updateError } = await supabase
     .from("leads")
-    .update({ status: newStatus, ...extraData, updated_at: new Date().toISOString() })
+    .update({ status: newStatus, ...extraData })
     .eq("id", leadId)
     .select("*")
     .single();
