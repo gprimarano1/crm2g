@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { ChevronDown, Calendar } from "lucide-react";
+import { ChevronDown, Calendar, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { syncAllCampanhasAction } from "@/lib/actions/campanhas";
 
 // ================================================================
 // Types
@@ -46,6 +47,23 @@ export function DashboardFilters({
   const [periodo,    setPeriodo]    = useState<Period>((initPeriodo as Period) || "7d");
   const [dataInicio, setDataInicio] = useState(initDataInicio ?? "");
   const [dataFim,    setDataFim]    = useState(initDataFim    ?? "");
+
+  const [isSyncing,  startSync]    = useTransition();
+  const [syncResult, setSyncResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  async function handleSyncAll() {
+    setSyncResult(null);
+    startSync(async () => {
+      const res = await syncAllCampanhasAction();
+      if (res.success) {
+        setSyncResult({ ok: true, msg: `${res.data.campaigns} campanhas sincronizadas` });
+        router.refresh();
+      } else {
+        setSyncResult({ ok: false, msg: res.error });
+      }
+      setTimeout(() => setSyncResult(null), 5000);
+    });
+  }
 
   const navigate = useCallback((
     c: string,
@@ -154,6 +172,26 @@ export function DashboardFilters({
           )}
         </div>
       )}
+
+      {/* Divider */}
+      <div className="h-6 w-px bg-bg-border ml-auto" aria-hidden />
+
+      {/* Sync Meta */}
+      {syncResult && (
+        <span className={cn("flex items-center gap-1.5 text-xs", syncResult.ok ? "text-success" : "text-danger")}>
+          {syncResult.ok ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+          {syncResult.msg}
+        </span>
+      )}
+      <button
+        onClick={handleSyncAll}
+        disabled={isSyncing}
+        title="Sincronizar campanhas Meta de todos os clientes"
+        className="flex h-9 items-center gap-2 rounded-xl border border-bg-border bg-bg-surface2 px-3 text-xs font-medium text-text-muted transition-colors hover:border-accent/40 hover:bg-accent/8 hover:text-accent disabled:opacity-50"
+      >
+        <RefreshCw size={13} className={isSyncing ? "animate-spin" : ""} />
+        {isSyncing ? "Sincronizando…" : "Sync Meta"}
+      </button>
     </div>
   );
 }

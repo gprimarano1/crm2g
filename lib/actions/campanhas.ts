@@ -222,6 +222,42 @@ export async function syncCampanhasAction(
 }
 
 // ================================================================
+// syncAllCampanhasAction — sincroniza TODOS os clientes com Meta configurado
+// ================================================================
+
+export async function syncAllCampanhasAction(
+  dateRange?: DateRange
+): Promise<ActionResult<{ campaigns: number; clientes: number }>> {
+  const supabase = await createAdminClient();
+
+  const { data: clientes } = await supabase
+    .from("clientes")
+    .select("id")
+    .not("meta_ad_account_id", "is", null)
+    .not("meta_access_token", "is", null)
+    .eq("status", "ativo");
+
+  if (!clientes || clientes.length === 0) {
+    return { success: false, error: "Nenhum cliente com Meta Ads configurado" };
+  }
+
+  const results = await Promise.allSettled(
+    clientes.map((c) => syncClienteCampanhas(c.id, dateRange))
+  );
+
+  const totalCampaigns = results.reduce((s, r) => {
+    if (r.status === "fulfilled" && r.value.success) return s + r.value.campaigns;
+    return s;
+  }, 0);
+
+  revalidatePath("/dashboard");
+  revalidatePath("/campanhas");
+  revalidatePath("/clientes", "layout");
+
+  return { success: true, data: { campaigns: totalCampaigns, clientes: clientes.length } };
+}
+
+// ================================================================
 // getCampanhasCliente — busca campanhas salvas no Supabase
 // ================================================================
 
