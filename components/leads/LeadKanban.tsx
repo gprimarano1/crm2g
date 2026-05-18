@@ -556,7 +556,7 @@ export function LeadKanban({
     return acc;
   }, {} as Record<ColId, Lead[]>);
 
-  // ── Realtime subscription ────────────────────────────────────
+  // ── Realtime subscription (sem filter server-side — filtra no cliente) ─
 
   useEffect(() => {
     const supabase = createClient();
@@ -565,9 +565,9 @@ export function LeadKanban({
       .channel(`kanban:${clienteId}`)
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "leads",
-        filter: `cliente_id=eq.${clienteId}`,
       }, (payload) => {
         const newLead = payload.new as Lead;
+        if (newLead.cliente_id !== clienteId) return;
         setLeads((prev) => prev.some((l) => l.id === newLead.id) ? prev : [newLead, ...prev]);
         setNewLeadIds((prev) => { const s = new Set(prev); s.add(newLead.id); return s; });
         setTimeout(() => {
@@ -576,43 +576,44 @@ export function LeadKanban({
       })
       .on("postgres_changes", {
         event: "UPDATE", schema: "public", table: "leads",
-        filter: `cliente_id=eq.${clienteId}`,
       }, (payload) => {
         const updated = payload.new as Lead;
-        // Usa functional update para não precisar de selectedLead no array de deps
+        if (updated.cliente_id !== clienteId) return;
         setLeads((prev) => prev.map((l) => l.id === updated.id ? updated : l));
         setSelectedLead((prev) => prev?.id === updated.id ? updated : prev);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [clienteId]); // selectedLead removido — evita recriar o canal ao abrir/fechar leads
+  }, [clienteId]);
 
-  // ── Polling de fallback — atualiza a cada 20s se Realtime falhar ─
+  // ── Polling via server endpoint — fallback confiável a cada 15s ──
 
   useEffect(() => {
-    const supabase = createClient();
     let active = true;
 
     async function poll() {
-      const { data } = await supabase
-        .from("leads")
-        .select("*")
-        .eq("cliente_id", clienteId)
-        .order("created_at", { ascending: false })
-        .limit(300);
-      if (!active || !data) return;
-      setLeads((prev) => {
-        // Só atualiza se houver diferença para evitar re-renders desnecessários
-        const hasChange = data.some((d) => {
-          const existing = prev.find((p) => p.id === d.id);
-          return !existing || existing.status !== d.status || existing.updated_at !== (d as Lead).updated_at;
-        }) || data.length !== prev.length;
-        return hasChange ? (data as Lead[]) : prev;
-      });
+      try {
+        const res = await fetch(`/api/leads/kanban?cliente_id=${clienteId}`);
+        if (!res.ok || !active) return;
+        const { leads: fresh } = await res.json() as { leads: Lead[] };
+        if (!fresh?.length && !active) return;
+        setLeads((prev) => {
+          if (!fresh) return prev;
+          const hasChange =
+            fresh.length !== prev.length ||
+            fresh.some((d) => {
+              const e = prev.find((p) => p.id === d.id);
+              return !e || e.status !== d.status || e.updated_at !== d.updated_at;
+            });
+          return hasChange ? fresh : prev;
+        });
+      } catch {
+        // ignora falhas de rede
+      }
     }
 
-    const interval = setInterval(poll, 20000);
+    const interval = setInterval(poll, 15000);
     return () => { active = false; clearInterval(interval); };
   }, [clienteId]);
 
