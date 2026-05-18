@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { Play, Pause, ChevronDown, ChevronRight, Loader2, AlertCircle, LayoutTemplate, TrendingUp } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Cell } from "recharts";
 import { Badge } from "@/components/ui/Badge";
 import {
   getAdSetsAction,
@@ -85,23 +85,6 @@ function GastosDiariosChart({
             interval="preserveStartEnd"
           />
           <YAxis hide domain={[0, maxSpend * 1.15]} />
-          <Tooltip
-            cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            formatter={(value: number) => [fmtBRL(value), "Gasto"]}
-            labelFormatter={(label: string) => {
-              const parts = String(label).split("-");
-              return parts.length === 3 ? `${parts[2]}/${parts[1]}` : label;
-            }}
-            contentStyle={{
-              background: "#1a1a2e",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: "8px",
-              fontSize: "11px",
-              padding: "6px 10px",
-            }}
-            labelStyle={{ color: "#e0e0f0", fontWeight: 600, marginBottom: 2 }}
-            itemStyle={{ color: "#8888a8" }}
-          />
           <Bar dataKey="spend" radius={[3, 3, 0, 0]} maxBarSize={20}>
             {data.map((entry, i) => (
               <Cell
