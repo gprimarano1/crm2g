@@ -87,7 +87,7 @@ function GastosDiariosChart({
           <YAxis hide domain={[0, maxSpend * 1.15]} />
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: GastoDiario }> }) => {
+            content={({ active, payload }: { active?: boolean; payload?: ReadonlyArray<{ payload: GastoDiario }> }) => {
               if (!active || !payload?.length) return null;
               const d = payload[0].payload;
               return (
