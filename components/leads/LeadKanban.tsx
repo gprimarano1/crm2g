@@ -579,13 +579,42 @@ export function LeadKanban({
         filter: `cliente_id=eq.${clienteId}`,
       }, (payload) => {
         const updated = payload.new as Lead;
+        // Usa functional update para não precisar de selectedLead no array de deps
         setLeads((prev) => prev.map((l) => l.id === updated.id ? updated : l));
-        if (selectedLead?.id === updated.id) setSelectedLead(updated);
+        setSelectedLead((prev) => prev?.id === updated.id ? updated : prev);
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [clienteId, selectedLead?.id]);
+  }, [clienteId]); // selectedLead removido — evita recriar o canal ao abrir/fechar leads
+
+  // ── Polling de fallback — atualiza a cada 20s se Realtime falhar ─
+
+  useEffect(() => {
+    const supabase = createClient();
+    let active = true;
+
+    async function poll() {
+      const { data } = await supabase
+        .from("leads")
+        .select("*")
+        .eq("cliente_id", clienteId)
+        .order("created_at", { ascending: false })
+        .limit(300);
+      if (!active || !data) return;
+      setLeads((prev) => {
+        // Só atualiza se houver diferença para evitar re-renders desnecessários
+        const hasChange = data.some((d) => {
+          const existing = prev.find((p) => p.id === d.id);
+          return !existing || existing.status !== d.status || existing.updated_at !== (d as Lead).updated_at;
+        }) || data.length !== prev.length;
+        return hasChange ? (data as Lead[]) : prev;
+      });
+    }
+
+    const interval = setInterval(poll, 20000);
+    return () => { active = false; clearInterval(interval); };
+  }, [clienteId]);
 
   // ── Abrir panel ──────────────────────────────────────────────
 
