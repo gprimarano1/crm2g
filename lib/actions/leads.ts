@@ -214,12 +214,13 @@ async function transitionLeadStatus(
 ): Promise<{ success: boolean; lead?: Lead; error?: string }> {
   const supabase = await createAdminClient();
 
-  const { data: lead } = await supabase
+  const { data: lead, error: leadError } = await supabase
     .from("leads")
     .select("*, clientes!inner(meta_pixel_id, meta_capi_token)")
     .eq("id", leadId)
-    .single();
+    .maybeSingle();
 
+  if (leadError) return { success: false, error: leadError.message };
   if (!lead) return { success: false, error: "Lead não encontrado" };
 
   const { data: updated, error } = await supabase
@@ -227,9 +228,10 @@ async function transitionLeadStatus(
     .update({ status: newStatus, ...extraData })
     .eq("id", leadId)
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) return { success: false, error: error.message };
+  if (!updated) return { success: false, error: "Falha ao atualizar lead" };
 
   if (lead.status !== newStatus) {
     await supabase.from("lead_status_history").insert({

@@ -194,6 +194,53 @@ export async function getCampanhas(
 }
 
 // ================================================================
+// getCampanhaGastosDiarios — spend por dia de uma campanha (time_increment=1)
+// ================================================================
+
+export interface GastoDiario {
+  date:       string; // yyyy-MM-dd
+  spend:      number;
+  leads:      number;
+  impressoes: number;
+  cliques:    number;
+}
+
+export async function getCampanhaGastosDiarios(
+  campaignId: string,
+  accessToken: string,
+  dateRange: DateRange
+): Promise<GastoDiario[]> {
+  type InsightDia = {
+    date_start: string;
+    spend?: string;
+    impressions?: string;
+    clicks?: string;
+    actions?: MetaAction[];
+  };
+  type Res = { data: InsightDia[] };
+
+  const res = await metaFetch<Res>(
+    `${campaignId}/insights`,
+    accessToken,
+    {
+      fields:         "spend,impressions,clicks,actions",
+      time_increment: "1",
+      time_range:     JSON.stringify(dateRange),
+      limit:          "90",
+    },
+    { cache: "no-store" }
+  );
+
+  return (res.data ?? []).map((d) => ({
+    date:       d.date_start,
+    spend:      Number(d.spend ?? 0),
+    leads:      extractAction(d.actions, "lead"),
+    impressoes: Number(d.impressions ?? 0),
+    cliques:    Number(d.clicks ?? 0),
+  }));
+}
+
+// ================================================================
 // getAdSets — ad sets de uma campanha com insights embutidos
 // ================================================================
 

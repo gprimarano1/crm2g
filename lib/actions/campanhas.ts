@@ -5,6 +5,7 @@ import { format, subDays } from "date-fns";
 import { createClient, createAdminClient } from "@/lib/supabase/server";
 import {
   getCampanhas,
+  getCampanhaGastosDiarios,
   getAdSets,
   getAds,
   pausarCampanha,
@@ -18,7 +19,10 @@ import {
   type AdSetMetaData,
   type AnuncioMetaData,
   type DateRange,
+  type GastoDiario,
 } from "@/lib/meta/campanhas";
+
+export type { GastoDiario };
 
 export type { AdSetMetaData, AnuncioMetaData };
 
@@ -97,7 +101,7 @@ export async function syncClienteCampanhas(
 
   const dateRange: DateRange = customDateRange ?? {
     since: format(subDays(new Date(), 7), "yyyy-MM-dd"),
-    until: format(new Date(), "yyyy-MM-dd"),
+    until: format(subDays(new Date(), 1), "yyyy-MM-dd"),
   };
 
   let campanhasData: CampanhaMetaData[];
@@ -398,6 +402,32 @@ export async function toggleAnuncioStatusAction(
     return { success: true, data: undefined };
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Erro ao chamar Meta API";
+    return { success: false, error: msg };
+  }
+}
+
+// ================================================================
+// getGastosDiariosAction — spend diário de uma campanha (time_increment=1)
+// ================================================================
+
+export async function getGastosDiariosAction(
+  metaCampaignId: string,
+  clienteId: string,
+  dateRange?: DateRange
+): Promise<ActionResult<GastoDiario[]>> {
+  const token = await getClienteToken(clienteId);
+  if (!token) return { success: false, error: "Token Meta não configurado" };
+
+  const range: DateRange = dateRange ?? {
+    since: format(subDays(new Date(), 13), "yyyy-MM-dd"),
+    until: format(subDays(new Date(), 1),  "yyyy-MM-dd"),
+  };
+
+  try {
+    const dias = await getCampanhaGastosDiarios(metaCampaignId, token, range);
+    return { success: true, data: dias };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erro ao buscar dados diários";
     return { success: false, error: msg };
   }
 }

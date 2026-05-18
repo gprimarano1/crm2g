@@ -1,20 +1,118 @@
 "use client";
 
 import { useState, useEffect, useTransition } from "react";
-import { Play, Pause, ChevronDown, ChevronRight, Loader2, AlertCircle, LayoutTemplate } from "lucide-react";
+import { Play, Pause, ChevronDown, ChevronRight, Loader2, AlertCircle, LayoutTemplate, TrendingUp } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { Badge } from "@/components/ui/Badge";
 import {
   getAdSetsAction,
   getAnunciosAction,
+  getGastosDiariosAction,
   toggleAdSetStatusAction,
   toggleAnuncioStatusAction,
   type AdSetMetaData,
   type AnuncioMetaData,
+  type GastoDiario,
 } from "@/lib/actions/campanhas";
 
 const fmtBRL = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const fmtNum = (v: number) => new Intl.NumberFormat("pt-BR").format(v);
+
+// ================================================================
+// GastosDiariosChart — sparkline de gasto dos últimos 14 dias
+// ================================================================
+
+function GastosDiariosChart({
+  metaCampaignId,
+  clienteId,
+}: {
+  metaCampaignId: string;
+  clienteId: string;
+}) {
+  const [data,    setData]    = useState<GastoDiario[] | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    getGastosDiariosAction(metaCampaignId, clienteId).then((res) => {
+      setLoading(false);
+      if (res.success) setData(res.data);
+      else setError(res.error);
+    });
+  }, [metaCampaignId, clienteId]);
+
+  const maxSpend = data ? Math.max(...data.map((d) => d.spend), 1) : 1;
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-text-muted py-2">
+        <Loader2 size={12} className="animate-spin" />
+        Carregando gasto diário…
+      </div>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <div className="flex items-center gap-2 text-xs text-danger py-1">
+        <AlertCircle size={12} />
+        {error ?? "Erro ao carregar dados"}
+      </div>
+    );
+  }
+
+  const hasData = data.some((d) => d.spend > 0);
+  if (!hasData) {
+    return (
+      <p className="text-xs text-text-muted py-1">Sem gasto registrado no período.</p>
+    );
+  }
+
+  return (
+    <div>
+      <ResponsiveContainer width="100%" height={80}>
+        <BarChart data={data} margin={{ top: 4, right: 0, left: 0, bottom: 0 }} barCategoryGap="20%">
+          <XAxis
+            dataKey="date"
+            tick={{ fill: "#8888a8", fontSize: 9 }}
+            axisLine={false}
+            tickLine={false}
+            tickFormatter={(v: string) => {
+              const [, m, d] = v.split("-");
+              return `${d}/${m}`;
+            }}
+            interval="preserveStartEnd"
+          />
+          <YAxis hide domain={[0, maxSpend * 1.15]} />
+          <Tooltip
+            cursor={{ fill: "rgba(255,255,255,0.04)" }}
+            content={({ active, payload }: { active?: boolean; payload?: Array<{ payload: GastoDiario }> }) => {
+              if (!active || !payload?.length) return null;
+              const d = payload[0].payload;
+              return (
+                <div className="rounded-lg border border-bg-border bg-bg-surface px-2.5 py-1.5 text-xs shadow-lg">
+                  <p className="font-medium text-text">{d.date.split("-").reverse().join("/")}</p>
+                  <p className="text-text-muted">Gasto: <span className="font-medium text-text">{fmtBRL(d.spend)}</span></p>
+                  {d.leads > 0 && <p className="text-success">Leads: {d.leads}</p>}
+                </div>
+              );
+            }}
+          />
+          <Bar dataKey="spend" radius={[3, 3, 0, 0]} maxBarSize={20}>
+            {data.map((entry, i) => (
+              <Cell
+                key={i}
+                fill={entry.spend > 0 ? "#5b6ef5" : "rgba(91,110,245,0.15)"}
+                fillOpacity={entry.spend > 0 ? 0.85 : 1}
+              />
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 // ================================================================
 // Linha de anúncio individual
@@ -238,7 +336,20 @@ export function AdSetsExpansion({
   }
 
   return (
-    <div className="border-t border-bg-border bg-bg/60 px-5 py-4">
+    <div className="border-t border-bg-border bg-bg/60 px-5 py-4 flex flex-col gap-5">
+      {/* Gasto diário — últimos 14 dias */}
+      <div>
+        <div className="flex items-center gap-1.5 mb-2">
+          <TrendingUp size={12} className="text-accent" />
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-text-subtle">
+            Gasto diário — últimos 14 dias
+          </p>
+        </div>
+        <GastosDiariosChart metaCampaignId={metaCampaignId} clienteId={clienteId} />
+      </div>
+
+      {/* Ad sets */}
+      <div>
       <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-text-subtle">
         Conjuntos de anúncios
       </p>
@@ -275,6 +386,7 @@ export function AdSetsExpansion({
           ))}
         </div>
       )}
+      </div>
     </div>
   );
 }

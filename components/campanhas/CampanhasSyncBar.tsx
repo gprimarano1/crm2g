@@ -49,11 +49,12 @@ function toDateStr(d: Date): string {
 }
 
 function computeDateRange(periodo: string, customSince: string, customUntil: string): { since: string; until: string } {
-  const today = new Date();
-  const until = toDateStr(today);
-  if (periodo === "7d")  return { since: toDateStr(new Date(today.getTime() - 6  * 86400000)), until };
-  if (periodo === "30d") return { since: toDateStr(new Date(today.getTime() - 29 * 86400000)), until };
-  if (periodo === "90d") return { since: toDateStr(new Date(today.getTime() - 89 * 86400000)), until };
+  const today     = new Date();
+  const yesterday = new Date(today.getTime() - 86400000);
+  const until     = toDateStr(yesterday); // Meta API has processing delay for current day
+  if (periodo === "7d")  return { since: toDateStr(new Date(yesterday.getTime() - 6  * 86400000)), until };
+  if (periodo === "30d") return { since: toDateStr(new Date(yesterday.getTime() - 29 * 86400000)), until };
+  if (periodo === "90d") return { since: toDateStr(new Date(yesterday.getTime() - 89 * 86400000)), until };
   return { since: customSince || until, until: customUntil || until };
 }
 
