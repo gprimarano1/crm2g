@@ -87,17 +87,20 @@ function GastosDiariosChart({
           <YAxis hide domain={[0, maxSpend * 1.15]} />
           <Tooltip
             cursor={{ fill: "rgba(255,255,255,0.04)" }}
-            content={({ active, payload }: { active?: boolean; payload?: ReadonlyArray<{ payload: GastoDiario }> }) => {
-              if (!active || !payload?.length) return null;
-              const d = payload[0].payload;
-              return (
-                <div className="rounded-lg border border-bg-border bg-bg-surface px-2.5 py-1.5 text-xs shadow-lg">
-                  <p className="font-medium text-text">{d.date.split("-").reverse().join("/")}</p>
-                  <p className="text-text-muted">Gasto: <span className="font-medium text-text">{fmtBRL(d.spend)}</span></p>
-                  {d.leads > 0 && <p className="text-success">Leads: {d.leads}</p>}
-                </div>
-              );
+            formatter={(value: number) => [fmtBRL(value), "Gasto"]}
+            labelFormatter={(label: string) => {
+              const parts = String(label).split("-");
+              return parts.length === 3 ? `${parts[2]}/${parts[1]}` : label;
             }}
+            contentStyle={{
+              background: "#1a1a2e",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "8px",
+              fontSize: "11px",
+              padding: "6px 10px",
+            }}
+            labelStyle={{ color: "#e0e0f0", fontWeight: 600, marginBottom: 2 }}
+            itemStyle={{ color: "#8888a8" }}
           />
           <Bar dataKey="spend" radius={[3, 3, 0, 0]} maxBarSize={20}>
             {data.map((entry, i) => (
