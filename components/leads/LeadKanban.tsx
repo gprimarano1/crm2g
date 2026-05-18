@@ -545,6 +545,9 @@ export function LeadKanban({
   const [modal, setModal]           = useState<ModalState>({ type: null });
   const [refreshing, setRefreshing] = useState(false);
 
+  // Ref to poll function so Realtime handler can trigger an immediate fetch
+  const pollFnRef = useRef<(() => Promise<void>) | null>(null);
+
   // Panel state
   const [selectedLead, setSelectedLead]   = useState<Lead | null>(null);
   const [panelHistory, setPanelHistory]   = useState<LeadStatusHistory[]>([]);
@@ -556,7 +559,7 @@ export function LeadKanban({
     return acc;
   }, {} as Record<ColId, Lead[]>);
 
-  // ── Realtime subscription (sem filter server-side — filtra no cliente) ─
+  // ── Realtime subscription — usado apenas como gatilho para poll() ──
 
   useEffect(() => {
     const supabase = createClient();
@@ -568,7 +571,8 @@ export function LeadKanban({
       }, (payload) => {
         const newLead = payload.new as Lead;
         if (newLead.cliente_id !== clienteId) return;
-        setLeads((prev) => prev.some((l) => l.id === newLead.id) ? prev : [newLead, ...prev]);
+        // Busca dados autoritativos no servidor; usa o id apenas para o badge
+        pollFnRef.current?.();
         setNewLeadIds((prev) => { const s = new Set(prev); s.add(newLead.id); return s; });
         setTimeout(() => {
           setNewLeadIds((prev) => { const s = new Set(prev); s.delete(newLead.id); return s; });
@@ -579,45 +583,51 @@ export function LeadKanban({
       }, (payload) => {
         const updated = payload.new as Lead;
         if (updated.cliente_id !== clienteId) return;
-        setLeads((prev) => prev.map((l) => l.id === updated.id ? updated : l));
-        setSelectedLead((prev) => prev?.id === updated.id ? updated : prev);
+        // Não aplica payload.new diretamente — busca dados frescos do servidor
+        pollFnRef.current?.();
       })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [clienteId]);
 
-  // ── Polling via server endpoint — fallback confiável a cada 15s ──
+  // ── Polling via server endpoint — fallback confiável e fonte de verdade ──
 
   useEffect(() => {
     let active = true;
 
     async function poll() {
       try {
-        const res = await fetch(`/api/leads/kanban?cliente_id=${clienteId}`);
+        const res = await fetch(`/api/leads/kanban?cliente_id=${clienteId}`, { cache: "no-store" });
         if (!active || !res.ok) return;
         const body = await res.json() as { leads?: Lead[] };
         const fresh = body.leads;
         if (!active || !Array.isArray(fresh)) return;
         setLeads((prev) => {
-          // Não substitui se o retorno estiver vazio e o estado atual tiver leads
-          // (evita limpar kanban por falha temporária)
           if (fresh.length === 0 && prev.length > 0) return prev;
-          const hasChange =
-            fresh.length !== prev.length ||
-            fresh.some((d) => {
-              const e = prev.find((p) => p.id === d.id);
-              return !e || e.status !== d.status || e.updated_at !== d.updated_at;
-            });
-          return hasChange ? fresh : prev;
+          const prevMap = new Map(prev.map((l) => [l.id, l]));
+          return fresh.map((serverLead) => {
+            const localLead = prevMap.get(serverLead.id);
+            if (localLead && localLead.updated_at > serverLead.updated_at) {
+              return localLead;
+            }
+            return serverLead;
+          });
+        });
+        setSelectedLead((prev) => {
+          if (!prev) return prev;
+          const updated = fresh.find((l) => l.id === prev.id);
+          if (!updated || updated.updated_at === prev.updated_at) return prev;
+          return updated;
         });
       } catch {
         // ignora falhas de rede
       }
     }
 
-    const interval = setInterval(poll, 15000);
-    return () => { active = false; clearInterval(interval); };
+    pollFnRef.current = poll;
+    const interval = setInterval(poll, 10000);
+    return () => { active = false; clearInterval(interval); pollFnRef.current = null; };
   }, [clienteId]);
 
   // ── Abrir panel ──────────────────────────────────────────────
@@ -638,8 +648,9 @@ export function LeadKanban({
   // ── Modal success handler ────────────────────────────────────
 
   function handleModalSuccess(updated: Lead) {
-    setLeads((prev) => prev.map((l) => l.id === updated.id ? updated : l));
-    if (selectedLead?.id === updated.id) setSelectedLead(updated);
+    const withTs = { ...updated, updated_at: new Date().toISOString() };
+    setLeads((prev) => prev.map((l) => l.id === updated.id ? withTs : l));
+    if (selectedLead?.id === updated.id) setSelectedLead(withTs);
     setModal({ type: null });
   }
 
@@ -704,8 +715,9 @@ export function LeadKanban({
         open={panelOpen}
         onClose={() => setPanelOpen(false)}
         onLeadUpdate={(updated) => {
-          setLeads((prev) => prev.map((l) => l.id === updated.id ? updated : l));
-          setSelectedLead(updated);
+          const withTs = { ...updated, updated_at: new Date().toISOString() };
+          setLeads((prev) => prev.map((l) => l.id === updated.id ? withTs : l));
+          setSelectedLead(withTs);
         }}
       />
 

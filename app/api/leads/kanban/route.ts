@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createAdminClient } from "@/lib/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: NextRequest) {
   const clienteId = request.nextUrl.searchParams.get("cliente_id");
   if (!clienteId) {
@@ -19,5 +21,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ leads: data ?? [] });
+  return NextResponse.json({ leads: data ?? [] }, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }

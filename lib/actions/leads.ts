@@ -224,15 +224,15 @@ async function transitionLeadStatus(
   if (leadError) return { success: false, error: leadError.message };
   if (!lead) return { success: false, error: "Lead não encontrado" };
 
-  const { error } = await supabase
+  const { data: updatedLead, error: updateError } = await supabase
     .from("leads")
-    .update({ status: newStatus, ...extraData })
-    .eq("id", leadId);
+    .update({ status: newStatus, ...extraData, updated_at: new Date().toISOString() })
+    .eq("id", leadId)
+    .select("*")
+    .single();
 
-  if (error) return { success: false, error: error.message };
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const updated = { ...(lead as any), status: newStatus, ...extraData } as Lead;
+  if (updateError) return { success: false, error: updateError.message };
+  if (!updatedLead) return { success: false, error: "Atualização não aplicada ao banco de dados" };
 
   if (lead.status !== newStatus) {
     await supabase.from("lead_status_history").insert({
@@ -264,7 +264,7 @@ async function transitionLeadStatus(
   revalidatePath("/leads");
   revalidatePath("/dashboard");
   revalidatePath("/clientes", "layout");
-  return { success: true, lead: updated as Lead };
+  return { success: true, lead: updatedLead as Lead };
 }
 
 // ================================================================
