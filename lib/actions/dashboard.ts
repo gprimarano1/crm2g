@@ -32,12 +32,19 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .order("nome_empresa");
   if (clienteId) clientesQ = clientesQ.eq("id", clienteId);
 
-  // Campanhas para KPIs: sem filtro de data (dados agregados do último sync)
-  // O gasto_total reflete o período do último sync, não o período selecionado no dashboard
+  // Campanhas para KPIs: sem filtro de data (dados agregados do último sync, fallback)
   let campanhasKpiQ = supabase
     .from("campanhas")
-    .select("cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status, periodo_inicio, periodo_fim, synced_at");
+    .select("id, cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status, periodo_inicio, periodo_fim");
   if (clienteId) campanhasKpiQ = campanhasKpiQ.eq("cliente_id", clienteId);
+
+  // Gastos diários filtrados pelo período selecionado (tabela campanhas_diarias)
+  let diariasQ = supabase
+    .from("campanhas_diarias")
+    .select("campanha_id, cliente_id, gasto, leads, impressoes, cliques")
+    .gte("data", dateFromStr)
+    .lte("data", dateToStr);
+  if (clienteId) diariasQ = diariasQ.eq("cliente_id", clienteId);
 
   // Campanhas para alertas: sempre ativas, sem filtro de data
   let campanhasAlertasQ = supabase
@@ -62,8 +69,8 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .lt("data_registro",  dateToStr);
   if (clienteId) metricasQ = metricasQ.eq("cliente_id", clienteId);
 
-  const [clientesRes, campanhasKpiRes, campanhasAlertasRes, leadsRes, metricasRes] = await Promise.all([
-    clientesQ, campanhasKpiQ, campanhasAlertasQ, leadsQ, metricasQ,
+  const [clientesRes, campanhasKpiRes, campanhasAlertasRes, leadsRes, metricasRes, diariasRes] = await Promise.all([
+    clientesQ, campanhasKpiQ, campanhasAlertasQ, leadsQ, metricasQ, diariasQ,
   ]);
 
   const clientes         = clientesRes.data        ?? [];
@@ -71,10 +78,14 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const campanhasAlertas = campanhasAlertasRes.data ?? [];
   const leads            = leadsRes.data            ?? [];
   const metricas         = metricasRes.data         ?? [];
+  const diarias          = diariasRes.data          ?? [];
 
   // ── KPIs ─────────────────────────────────────────────────────
 
-  const investimento_total = campanhas.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
+  // Usa dados diários quando disponíveis (após migração 012), senão fallback para gasto_total
+  const investimento_total = diarias.length > 0
+    ? diarias.reduce((s, d) => s + (d.gasto ?? 0), 0)
+    : campanhas.reduce((s, c) => s + (c.gasto_total ?? 0), 0);
   const leads_total        = leads.length;
   const cpl_medio          = leads_total > 0 ? investimento_total / leads_total : 0;
 
@@ -144,8 +155,11 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   // ── Mini-KPIs por cliente ─────────────────────────────────────
 
   const clientesMini: ClienteMiniKPI[] = clientes.map((c) => {
+    const clientDiarias   = diarias.filter((d) => d.cliente_id === c.id);
     const clientCampanhas = campanhas.filter((camp) => camp.cliente_id === c.id);
-    const investimento    = clientCampanhas.reduce((s, camp) => s + (camp.gasto_total ?? 0), 0);
+    const investimento    = clientDiarias.length > 0
+      ? clientDiarias.reduce((s, d) => s + (d.gasto ?? 0), 0)
+      : clientCampanhas.reduce((s, camp) => s + (camp.gasto_total ?? 0), 0);
     const leads_mes       = leads.filter((l) => l.cliente_id === c.id).length;
     // Vendas combinadas por cliente
     const vendas_leads_c  = leads.filter((l) => l.cliente_id === c.id && l.status === "venda_fechada").length;

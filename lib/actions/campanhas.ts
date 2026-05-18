@@ -147,12 +147,50 @@ export async function syncClienteCampanhas(
     synced_at: now,
   }));
 
-  const { error: upsertError } = await supabase
+  const { error: upsertError, data: upsertedRows } = await supabase
     .from("campanhas")
-    .upsert(rows, { onConflict: "cliente_id,meta_campaign_id" });
+    .upsert(rows, { onConflict: "cliente_id,meta_campaign_id" })
+    .select("id, meta_campaign_id");
 
   if (upsertError) {
     return { success: false, error: upsertError.message, clienteId };
+  }
+
+  // Sincroniza dados diários (time_increment=1) para cada campanha
+  // Ignora erros — tabela pode não existir ainda (migração pendente)
+  try {
+    const campanhaIdMap: Record<string, string> = {};
+    for (const row of upsertedRows ?? []) {
+      if (row.meta_campaign_id) campanhaIdMap[row.meta_campaign_id] = row.id;
+    }
+
+    const diariasPromises = campanhasData.map(async (c) => {
+      const campanhaId = campanhaIdMap[c.meta_campaign_id];
+      if (!campanhaId) return;
+      const dias = await getCampanhaGastosDiarios(
+        c.meta_campaign_id,
+        cliente.meta_access_token,
+        dateRange
+      );
+      if (!dias.length) return;
+      const diariaRows = dias.map((d) => ({
+        campanha_id: campanhaId,
+        cliente_id:  clienteId,
+        data:        d.date,
+        gasto:       d.spend,
+        impressoes:  d.impressoes,
+        alcance:     0,
+        cliques:     d.cliques,
+        leads:       d.leads,
+      }));
+      await supabase
+        .from("campanhas_diarias")
+        .upsert(diariaRows, { onConflict: "campanha_id,data" });
+    });
+
+    await Promise.allSettled(diariasPromises);
+  } catch {
+    // Tabela campanhas_diarias não existe ainda — ignorar silenciosamente
   }
 
   // Atualiza timestamp de última sincronização no cliente

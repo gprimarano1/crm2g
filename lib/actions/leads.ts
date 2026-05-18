@@ -176,6 +176,7 @@ export async function updateLeadNotes(
   if (error) return { success: false, error: error.message };
   revalidatePath("/leads");
   revalidatePath("/painel");
+  revalidatePath("/dashboard");
   return { success: true };
 }
 
@@ -261,6 +262,8 @@ async function transitionLeadStatus(
   }
 
   revalidatePath("/leads");
+  revalidatePath("/dashboard");
+  revalidatePath("/clientes", "layout");
   return { success: true, lead: updated as Lead };
 }
 
