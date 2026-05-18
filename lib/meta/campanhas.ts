@@ -166,7 +166,7 @@ export async function getCampanhas(
     "actions",
   ].join(",");
 
-  // Embed insights no request de campanhas com time_range específico
+  // Embed insights com time_range inline — a sintaxe correta para embedded edges
   const fields = [
     "id",
     "name",
@@ -174,7 +174,7 @@ export async function getCampanhas(
     "objective",
     "daily_budget",
     "lifetime_budget",
-    `insights.fields(${insightFields})`,
+    `insights.time_range(${JSON.stringify(dateRange)}).fields(${insightFields})`,
   ].join(",");
 
   type Res = { data: MetaCampanhaRaw[]; paging?: unknown };
@@ -185,7 +185,6 @@ export async function getCampanhas(
     {
       fields,
       limit: "100",
-      time_range: JSON.stringify(dateRange),
     },
     { cache: "no-store" }
   );
@@ -250,18 +249,12 @@ export async function getAdSets(
   dateRange?: DateRange
 ): Promise<AdSetMetaData[]> {
   const insightFields = "spend,impressions,reach,clicks,ctr,cpc,cpm,actions";
-  const fields = [
-    "id",
-    "name",
-    "status",
-    "daily_budget",
-    `insights.fields(${insightFields})`,
-  ].join(",");
+  const insightsSegment = dateRange
+    ? `insights.time_range(${JSON.stringify(dateRange)}).fields(${insightFields})`
+    : `insights.fields(${insightFields})`;
+  const fields = ["id", "name", "status", "daily_budget", insightsSegment].join(",");
 
   const params: Record<string, string> = { fields, limit: "50" };
-  if (dateRange) {
-    params.time_range = JSON.stringify(dateRange);
-  }
 
   type AdSetRaw = {
     id: string;

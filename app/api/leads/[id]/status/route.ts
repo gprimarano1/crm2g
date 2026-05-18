@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/server";
 import { sendCAPIEvent } from "@/lib/capi/client";
 import type { LeadStatus } from "@/lib/actions/leads";
@@ -107,6 +108,11 @@ export async function PATCH(
       if (r.success) supabase.from("leads").update({ capi_enviado: true }).eq("id", leadId);
     }).catch(() => {});
   }
+
+  revalidatePath("/dashboard");
+  revalidatePath("/leads");
+  revalidatePath("/painel");
+  revalidatePath("/clientes", "layout");
 
   return NextResponse.json({ lead: updatedLead });
 }

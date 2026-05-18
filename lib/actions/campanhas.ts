@@ -282,6 +282,88 @@ export async function getCampanhasCliente(
 }
 
 // ================================================================
+// getCampanhasComDiarias — campanhas com métricas do período via campanhas_diarias
+// Quando viewDesde/viewAte são fornecidos, agrega dados diários do período
+// em vez de usar o gasto_total do último sync
+// ================================================================
+
+export async function getCampanhasComDiarias(
+  clienteId: string,
+  opts?: { status?: string; viewDesde?: string; viewAte?: string }
+): Promise<Campanha[]> {
+  const supabase = await createClient();
+
+  let query = supabase
+    .from("campanhas")
+    .select("*")
+    .eq("cliente_id", clienteId)
+    .order("gasto_total", { ascending: false });
+
+  if (opts?.status && opts.status !== "todos") {
+    query = query.eq("status", opts.status);
+  }
+
+  const { data } = await query;
+  const campanhas = (data ?? []) as Campanha[];
+
+  if (!opts?.viewDesde || !opts?.viewAte) return campanhas;
+
+  // Agrega campanhas_diarias pelo período selecionado
+  const { data: diarias } = await supabase
+    .from("campanhas_diarias")
+    .select("campanha_id, gasto, leads, impressoes, cliques")
+    .eq("cliente_id", clienteId)
+    .gte("data", opts.viewDesde)
+    .lte("data", opts.viewAte);
+
+  if (!diarias || diarias.length === 0) {
+    // Sem dados diários para o período — retorna com zeros para clareza
+    return campanhas.map((c) => ({
+      ...c,
+      gasto_total: 0,
+      leads: 0,
+      impressoes: 0,
+      cliques: 0,
+      cpl_medio: 0,
+      ctr: 0,
+      cpc: 0,
+      cpm: 0,
+    }));
+  }
+
+  type Agg = { gasto: number; leads: number; impressoes: number; cliques: number };
+  const byId: Record<string, Agg> = {};
+  for (const d of diarias) {
+    if (!byId[d.campanha_id]) byId[d.campanha_id] = { gasto: 0, leads: 0, impressoes: 0, cliques: 0 };
+    byId[d.campanha_id].gasto     += Number(d.gasto      ?? 0);
+    byId[d.campanha_id].leads     += Number(d.leads      ?? 0);
+    byId[d.campanha_id].impressoes += Number(d.impressoes ?? 0);
+    byId[d.campanha_id].cliques   += Number(d.cliques    ?? 0);
+  }
+
+  return campanhas
+    .map((c) => {
+      const agg = byId[c.id] ?? { gasto: 0, leads: 0, impressoes: 0, cliques: 0 };
+      const cpl = agg.leads > 0 && agg.gasto > 0 ? agg.gasto / agg.leads : 0;
+      const ctr = agg.impressoes > 0 && agg.cliques > 0 ? (agg.cliques / agg.impressoes) * 100 : 0;
+      const cpc = agg.cliques > 0 ? agg.gasto / agg.cliques : 0;
+      const cpm = agg.impressoes > 0 ? (agg.gasto / agg.impressoes) * 1000 : 0;
+      return {
+        ...c,
+        gasto_total: agg.gasto,
+        leads:       agg.leads,
+        impressoes:  agg.impressoes,
+        cliques:     agg.cliques,
+        cpl_medio:   cpl,
+        ctr,
+        cpc,
+        cpm,
+      };
+    })
+    .sort((a, b) => b.gasto_total - a.gasto_total);
+}
+
+// ================================================================
 // toggleCampanhaStatus — pausa ou ativa via Meta API + atualiza DB
 // ================================================================
 

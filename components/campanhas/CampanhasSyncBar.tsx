@@ -17,6 +17,8 @@ interface CampanhasSyncBarProps {
   clientes: ClienteOption[];
   clienteIdAtivo: string | null;
   statusAtivo: string;
+  viewDesde?: string;
+  viewAte?: string;
 }
 
 const STATUSES = [
@@ -62,6 +64,8 @@ export function CampanhasSyncBar({
   clientes,
   clienteIdAtivo,
   statusAtivo,
+  viewDesde,
+  viewAte,
 }: CampanhasSyncBarProps) {
   const router       = useRouter();
   const pathname     = usePathname();
@@ -71,26 +75,45 @@ export function CampanhasSyncBar({
   const [syncStatus, setSyncStatus]  = useState<"idle" | "success" | "error">("idle");
   const [syncMsg,    setSyncMsg]     = useState("");
 
-  // Period selector state
-  const [periodoSync,   setPeriodoSync]   = useState("7d");
-  const [customSince,   setCustomSince]   = useState("");
-  const [customUntil,   setCustomUntil]   = useState("");
+  // Derive initial period from URL params
+  const [periodoSync, setPeriodoSync] = useState(() => {
+    if (viewDesde && viewAte) return "custom";
+    return "7d";
+  });
+  const [customSince, setCustomSince] = useState(viewDesde ?? "");
+  const [customUntil, setCustomUntil] = useState(viewAte   ?? "");
 
   const clienteAtivo = clientes.find((c) => c.id === clienteIdAtivo) ?? null;
 
-  function navigate(key: string, value: string) {
+  function navigateParams(updates: Record<string, string | null>) {
     const params = new URLSearchParams(searchParams.toString());
-    if (value && value !== "todos") {
-      params.set(key, value);
-    } else {
-      params.delete(key);
+    for (const [k, v] of Object.entries(updates)) {
+      if (v !== null && v !== "" && v !== "todos") params.set(k, v);
+      else params.delete(k);
     }
     router.push(`${pathname}?${params.toString()}`);
   }
 
-  // P5: trocar cliente recarrega dados do DB + mostra skeleton
   function handleClienteChange(newId: string) {
-    navigate("cliente_id", newId);
+    navigateParams({ cliente_id: newId });
+  }
+
+  function handlePeriodoChange(periodo: string) {
+    setPeriodoSync(periodo);
+    if (periodo !== "custom") {
+      const range = computeDateRange(periodo, "", "");
+      navigateParams({ view_desde: range.since, view_ate: range.until });
+    }
+  }
+
+  function handleCustomSince(v: string) {
+    setCustomSince(v);
+    if (v && customUntil) navigateParams({ view_desde: v, view_ate: customUntil });
+  }
+
+  function handleCustomUntil(v: string) {
+    setCustomUntil(v);
+    if (customSince && v) navigateParams({ view_desde: customSince, view_ate: v });
   }
 
   function handleSync() {
@@ -138,7 +161,7 @@ export function CampanhasSyncBar({
           {STATUSES.map((s) => (
             <button
               key={s.value}
-              onClick={() => navigate("status", s.value)}
+              onClick={() => navigateParams({ status: s.value })}
               className={cn(
                 "rounded-lg px-3 py-1.5 text-xs font-medium transition-all",
                 statusAtivo === s.value || (s.value === "todos" && !statusAtivo)
@@ -158,14 +181,14 @@ export function CampanhasSyncBar({
         <div className="flex items-center gap-2 flex-wrap">
           <div className="flex items-center gap-1.5 text-xs text-text-subtle">
             <Calendar size={13} />
-            <span className="font-medium">Período do sync:</span>
+            <span className="font-medium">Período:</span>
           </div>
 
           <div className="flex items-center rounded-xl border border-bg-border bg-bg-surface2 p-0.5">
             {PERIODOS_SYNC.map((p) => (
               <button
                 key={p.value}
-                onClick={() => setPeriodoSync(p.value)}
+                onClick={() => handlePeriodoChange(p.value)}
                 className={cn(
                   "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all",
                   periodoSync === p.value
@@ -184,14 +207,14 @@ export function CampanhasSyncBar({
               <input
                 type="date"
                 value={customSince}
-                onChange={(e) => setCustomSince(e.target.value)}
+                onChange={(e) => handleCustomSince(e.target.value)}
                 className="h-8 rounded-xl border border-bg-border bg-bg-surface2 px-2 text-xs text-text outline-none focus:border-accent"
               />
               <span className="text-xs text-text-subtle">→</span>
               <input
                 type="date"
                 value={customUntil}
-                onChange={(e) => setCustomUntil(e.target.value)}
+                onChange={(e) => handleCustomUntil(e.target.value)}
                 className="h-8 rounded-xl border border-bg-border bg-bg-surface2 px-2 text-xs text-text outline-none focus:border-accent"
               />
             </div>

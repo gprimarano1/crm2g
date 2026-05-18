@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { CampanhasSyncBar } from "@/components/campanhas/CampanhasSyncBar";
 import { CampanhasTable } from "@/components/campanhas/CampanhasTable";
-import { getCampanhasCliente } from "@/lib/actions/campanhas";
+import { getCampanhasComDiarias } from "@/lib/actions/campanhas";
 
 export const metadata: Metadata = { title: "Campanhas" };
 
@@ -13,6 +13,8 @@ interface PageProps {
   searchParams: {
     cliente_id?: string;
     status?: string;
+    view_desde?: string;
+    view_ate?: string;
   };
 }
 
@@ -39,13 +41,23 @@ async function getClientesElegiveis() {
 async function CampanhasList({
   clienteId,
   status,
+  viewDesde,
+  viewAte,
 }: {
   clienteId: string;
   status?: string;
+  viewDesde?: string;
+  viewAte?: string;
 }) {
-  const campanhas = await getCampanhasCliente(clienteId, { status });
+  const campanhas = await getCampanhasComDiarias(clienteId, { status, viewDesde, viewAte });
 
-  return <CampanhasTable campanhas={campanhas} clienteId={clienteId} />;
+  return (
+    <CampanhasTable
+      campanhas={campanhas}
+      clienteId={clienteId}
+      viewPeriodo={viewDesde && viewAte ? `${viewDesde} → ${viewAte}` : undefined}
+    />
+  );
 }
 
 // ================================================================
@@ -53,8 +65,10 @@ async function CampanhasList({
 // ================================================================
 
 export default async function CampanhasPage({ searchParams }: PageProps) {
-  const clienteId = searchParams.cliente_id ?? null;
-  const statusFiltro = searchParams.status ?? "todos";
+  const clienteId   = searchParams.cliente_id ?? null;
+  const statusFiltro = searchParams.status    ?? "todos";
+  const viewDesde   = searchParams.view_desde;
+  const viewAte     = searchParams.view_ate;
 
   const clientes = await getClientesElegiveis();
 
@@ -85,6 +99,8 @@ export default async function CampanhasPage({ searchParams }: PageProps) {
               clientes={clientes as Array<{ id: string; nome_empresa: string; meta_last_synced_at: string | null }>}
               clienteIdAtivo={clienteId}
               statusAtivo={statusFiltro}
+              viewDesde={viewDesde}
+              viewAte={viewAte}
             />
           </Suspense>
 
@@ -97,12 +113,17 @@ export default async function CampanhasPage({ searchParams }: PageProps) {
             />
           ) : (
             <Suspense
-              key={`${clienteId}-${statusFiltro}`}
+              key={`${clienteId}-${statusFiltro}-${viewDesde}-${viewAte}`}
               fallback={
                 <div className="h-64 animate-pulse rounded-2xl border border-bg-border bg-bg-surface" />
               }
             >
-              <CampanhasList clienteId={clienteId} status={statusFiltro} />
+              <CampanhasList
+                clienteId={clienteId}
+                status={statusFiltro}
+                viewDesde={viewDesde}
+                viewAte={viewAte}
+              />
             </Suspense>
           )}
         </>

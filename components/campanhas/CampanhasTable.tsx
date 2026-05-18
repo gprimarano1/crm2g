@@ -37,6 +37,7 @@ interface EditTarget {
 interface CampanhasTableProps {
   campanhas: Campanha[];
   clienteId: string;
+  viewPeriodo?: string;
 }
 
 // ================================================================
@@ -489,7 +490,7 @@ const THEAD_COLS = [
   "",
 ];
 
-export function CampanhasTable({ campanhas, clienteId }: CampanhasTableProps) {
+export function CampanhasTable({ campanhas, clienteId, viewPeriodo }: CampanhasTableProps) {
   const [editTarget, setEditTarget] = useState<EditTarget | null>(null);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
@@ -521,6 +522,11 @@ export function CampanhasTable({ campanhas, clienteId }: CampanhasTableProps) {
     <>
       {/* ── Mobile: lista de cards ── */}
       <div className="lg:hidden flex flex-col gap-3">
+        {viewPeriodo && (
+          <div className="rounded-xl border border-accent/30 bg-accent/5 px-3 py-2 text-[11px] font-medium text-accent">
+            Período: {viewPeriodo}
+          </div>
+        )}
         {/* KPI strip mobile */}
         <div className="grid grid-cols-2 gap-3">
           <div className="rounded-2xl border border-bg-border bg-bg-surface px-4 py-3">
@@ -557,6 +563,13 @@ export function CampanhasTable({ campanhas, clienteId }: CampanhasTableProps) {
 
       {/* ── Desktop: tabela ── */}
       <div className="hidden lg:block rounded-2xl border border-bg-border bg-bg-surface overflow-hidden">
+        {/* Período em exibição */}
+        {viewPeriodo && (
+          <div className="flex items-center gap-2 border-b border-bg-border px-4 py-2 bg-accent/5">
+            <span className="text-[11px] font-medium text-accent">Período: {viewPeriodo}</span>
+            <span className="text-[11px] text-text-subtle">— dados de campanhas_diarias</span>
+          </div>
+        )}
         {/* KPI strip */}
         <div className="grid grid-cols-4 divide-x divide-bg-border border-b border-bg-border">
           <KPIStrip icon={<DollarSign size={14} />} label="Gasto total" value={fmtBRL(gastoTotal)} />
