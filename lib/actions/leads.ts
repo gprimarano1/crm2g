@@ -223,15 +223,15 @@ async function transitionLeadStatus(
   if (leadError) return { success: false, error: leadError.message };
   if (!lead) return { success: false, error: "Lead não encontrado" };
 
-  const { data: updated, error } = await supabase
+  const { error } = await supabase
     .from("leads")
     .update({ status: newStatus, ...extraData })
-    .eq("id", leadId)
-    .select()
-    .maybeSingle();
+    .eq("id", leadId);
 
   if (error) return { success: false, error: error.message };
-  if (!updated) return { success: false, error: "Falha ao atualizar lead" };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updated = { ...(lead as any), status: newStatus, ...extraData } as Lead;
 
   if (lead.status !== newStatus) {
     await supabase.from("lead_status_history").insert({

@@ -32,12 +32,11 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .order("nome_empresa");
   if (clienteId) clientesQ = clientesQ.eq("id", clienteId);
 
-  // Campanhas para KPIs: filtradas pelo período (overlap entre periodo_inicio/fim e o range selecionado)
+  // Campanhas para KPIs: sem filtro de data (dados agregados do último sync)
+  // O gasto_total reflete o período do último sync, não o período selecionado no dashboard
   let campanhasKpiQ = supabase
     .from("campanhas")
-    .select("cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status, periodo_inicio, periodo_fim")
-    .gte("periodo_fim",    dateFromStr)   // termina no/após início do range
-    .lte("periodo_inicio", dateToStr);   // começa no/antes do fim do range
+    .select("cliente_id, nome, gasto_total, ctr, frequencia, orcamento_diario, status, periodo_inicio, periodo_fim, synced_at");
   if (clienteId) campanhasKpiQ = campanhasKpiQ.eq("cliente_id", clienteId);
 
   // Campanhas para alertas: sempre ativas, sem filtro de data
