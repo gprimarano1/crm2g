@@ -595,11 +595,14 @@ export function LeadKanban({
     async function poll() {
       try {
         const res = await fetch(`/api/leads/kanban?cliente_id=${clienteId}`);
-        if (!res.ok || !active) return;
-        const { leads: fresh } = await res.json() as { leads: Lead[] };
-        if (!fresh?.length && !active) return;
+        if (!active || !res.ok) return;
+        const body = await res.json() as { leads?: Lead[] };
+        const fresh = body.leads;
+        if (!active || !Array.isArray(fresh)) return;
         setLeads((prev) => {
-          if (!fresh) return prev;
+          // Não substitui se o retorno estiver vazio e o estado atual tiver leads
+          // (evita limpar kanban por falha temporária)
+          if (fresh.length === 0 && prev.length > 0) return prev;
           const hasChange =
             fresh.length !== prev.length ||
             fresh.some((d) => {

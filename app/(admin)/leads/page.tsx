@@ -42,6 +42,7 @@ async function LeadsFeed({ searchParams }: PageProps) {
 
   return (
     <LeadKanban
+      key={clienteId}
       clienteId={clienteId}
       initialLeads={leads}
       showClientSelector={clientes.length > 1}
@@ -61,6 +62,7 @@ export default function LeadsPage({ searchParams }: PageProps) {
       </div>
 
       <Suspense
+        key={searchParams.cliente_id ?? "default"}
         fallback={
           <div className="flex gap-4 overflow-x-auto pb-2">
             {Array.from({ length: 5 }).map((_, i) => (
