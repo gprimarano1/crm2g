@@ -220,6 +220,61 @@ export async function atualizarOrcamento(
 }
 
 // ================================================================
+// Duplicar
+// ================================================================
+
+export async function duplicarOrcamento(
+  id: string,
+): Promise<{ success: boolean; id?: string; slug?: string; error?: string }> {
+  const supabase = await createClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Não autenticado" };
+
+  const original = await getOrcamentoById(id);
+  if (!original) return { success: false, error: "Orçamento original não encontrado" };
+
+  const slug   = crypto.randomBytes(6).toString("base64url");
+  const numero = gerarNumero();
+
+  const hoje      = new Date();
+  const emissao   = hoje.toISOString().slice(0, 10);
+  const validade  = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000)
+                      .toISOString()
+                      .slice(0, 10);
+
+  const total = calcularTotal(original.produtos);
+
+  const { data, error } = await supabase
+    .from("orcamentos")
+    .insert({
+      cliente_id:       original.cliente_id,
+      slug,
+      numero,
+      cliente_nome:     original.cliente_nome,
+      cliente_email:    original.cliente_email,
+      cliente_telefone: original.cliente_telefone,
+      data_emissao:     emissao,
+      data_validade:    validade,
+      produtos:         original.produtos,
+      formas_pagamento: original.formas_pagamento,
+      observacoes:      original.observacoes,
+      total,
+      status:           "rascunho",
+      created_by:       user.id,
+    })
+    .select("id, slug")
+    .single();
+
+  if (error) return { success: false, error: error.message };
+
+  revalidatePath("/orcamentos");
+  revalidatePath("/painel/orcamentos");
+
+  return { success: true, id: data.id, slug: data.slug };
+}
+
+// ================================================================
 // Deletar
 // ================================================================
 

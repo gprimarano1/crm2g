@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { ChevronDown, X, Upload, AlertCircle, RefreshCw } from "lucide-react";
+import { ChevronDown, X, Upload, AlertCircle, RefreshCw, Link2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
@@ -308,6 +308,15 @@ function FileInput({ onChange }: { onChange: (file: File | null) => void }) {
 // OrcamentoModal
 // ================================================================
 
+type OrcamentoOption = {
+  id:           string;
+  slug:         string;
+  numero:       string | null;
+  cliente_nome: string;
+  total:        number;
+  status:       string;
+};
+
 function OrcamentoModal({
   lead,
   onClose,
@@ -317,10 +326,39 @@ function OrcamentoModal({
   onClose: () => void;
   onSuccess: (updated: Lead) => void;
 }) {
-  const [valor, setValor]     = useState("");
-  const [file, setFile]       = useState<File | null>(null);
-  const [error, setError]     = useState("");
-  const [loading, setLoading] = useState(false);
+  const [valor, setValor]                 = useState("");
+  const [linkUrl, setLinkUrl]             = useState("");
+  const [selectedOrcId, setSelectedOrcId] = useState<string>("");
+  const [orcamentos, setOrcamentos]       = useState<OrcamentoOption[]>([]);
+  const [loadingOrcs, setLoadingOrcs]     = useState(true);
+  const [file, setFile]                   = useState<File | null>(null);
+  const [error, setError]                 = useState("");
+  const [loading, setLoading]             = useState(false);
+
+  // Carrega orçamentos do cliente para o dropdown
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch(`/api/orcamentos?cliente_id=${lead.cliente_id}`, { cache: "no-store" });
+        if (!active || !res.ok) return;
+        const body = await res.json() as { orcamentos?: OrcamentoOption[] };
+        if (active) setOrcamentos(body.orcamentos ?? []);
+      } finally {
+        if (active) setLoadingOrcs(false);
+      }
+    })();
+    return () => { active = false; };
+  }, [lead.cliente_id]);
+
+  function handleSelectOrcamento(id: string) {
+    setSelectedOrcId(id);
+    if (!id) return;
+    const orc = orcamentos.find((o) => o.id === id);
+    if (!orc) return;
+    setValor(String(orc.total ?? 0));
+    setLinkUrl(`${window.location.origin}/orcamento/${orc.slug}`);
+  }
 
   async function handleSubmit() {
     const v = parseFloat(valor.replace(",", "."));
@@ -336,7 +374,8 @@ function OrcamentoModal({
         if (up.error) { setError(`Erro no upload: ${up.error}`); return; }
         arquivoUrl = up.url;
       }
-      const result = await marcarOrcamento(lead.id, v, arquivoUrl);
+      const link = linkUrl.trim() || undefined;
+      const result = await marcarOrcamento(lead.id, v, arquivoUrl, link);
       if (!result.success) { setError(result.error ?? "Erro ao atualizar."); return; }
       onSuccess(result.lead!);
     } finally {
@@ -348,6 +387,30 @@ function OrcamentoModal({
     <ModalWrapper onClose={onClose}>
       <ModalHeader title="Marcar como Orçamento" leadNome={lead.nome} onClose={onClose} />
       <div className="flex flex-col gap-4 p-5">
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-text-muted">
+            Orçamento existente (opcional)
+          </label>
+          <div className="relative">
+            <select
+              value={selectedOrcId}
+              onChange={(e) => handleSelectOrcamento(e.target.value)}
+              disabled={loadingOrcs}
+              className="w-full appearance-none rounded-xl border border-bg-border bg-bg-surface2 px-3 py-2.5 pr-8 text-sm text-text outline-none focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/15 disabled:opacity-50"
+            >
+              <option value="">
+                {loadingOrcs ? "Carregando…" : orcamentos.length === 0 ? "Nenhum orçamento cadastrado" : "Selecionar para auto-preencher"}
+              </option>
+              {orcamentos.map((o) => (
+                <option key={o.id} value={o.id}>
+                  {(o.numero ?? o.id.slice(0, 6))} · {o.cliente_nome} · R$ {Number(o.total).toFixed(2)}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
+          </div>
+        </div>
+
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-text-muted">
             Valor do orçamento (R$) <span className="text-danger">*</span>
@@ -362,6 +425,23 @@ function OrcamentoModal({
             className="w-full rounded-xl border border-bg-border bg-bg-surface2 px-3 py-2.5 text-sm text-text outline-none placeholder:text-text-subtle focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/15"
           />
         </div>
+
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-medium text-text-muted">
+            Link do orçamento (opcional)
+          </label>
+          <div className="relative">
+            <Link2 size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-subtle" />
+            <input
+              type="url"
+              value={linkUrl}
+              onChange={(e) => setLinkUrl(e.target.value)}
+              placeholder="https://…"
+              className="w-full rounded-xl border border-bg-border bg-bg-surface2 pl-8 pr-3 py-2.5 text-sm text-text outline-none placeholder:text-text-subtle focus:border-[#a78bfa] focus:ring-2 focus:ring-[#a78bfa]/15"
+            />
+          </div>
+        </div>
+
         <FileInput onChange={setFile} />
         {error && <ModalError message={error} />}
         <div className="flex gap-2">

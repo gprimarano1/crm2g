@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useState } from "react";
+import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   ExternalLink,
   Copy,
   Check,
   Edit3,
+  CopyPlus,
   ArrowLeft,
   Calendar,
   Tag,
   Clock,
   Eye,
 } from "lucide-react";
-import type { Orcamento } from "@/lib/actions/orcamentos";
+import { duplicarOrcamento, type Orcamento } from "@/lib/actions/orcamentos";
 
 const STATUS_META: Record<string, { label: string; bg: string; text: string }> = {
   rascunho:    { label: "Rascunho",    bg: "bg-bg-surface2", text: "text-text-muted" },
@@ -39,13 +41,28 @@ interface Props {
 }
 
 export function OrcamentoDetalhe({ orcamento: o, basePath }: Props) {
-  const [copied, setCopied] = useState(false);
+  const router = useRouter();
+  const [copied, setCopied]       = useState(false);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [isCloning, startClone]   = useTransition();
 
   async function copiar() {
     const url = `${window.location.origin}/orcamento/${o.slug}`;
     await navigator.clipboard.writeText(url);
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
+  }
+
+  function clonar() {
+    setCloneError(null);
+    startClone(async () => {
+      const res = await duplicarOrcamento(o.id);
+      if (!res.success || !res.id) {
+        setCloneError(res.error ?? "Erro ao clonar orçamento.");
+        return;
+      }
+      router.push(`${basePath}/${res.id}/editar`);
+    });
   }
 
   return (
@@ -74,6 +91,13 @@ export function OrcamentoDetalhe({ orcamento: o, basePath }: Props) {
           >
             <ExternalLink size={13} /> Abrir página
           </a>
+          <button
+            onClick={clonar}
+            disabled={isCloning}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-bg-border bg-bg-surface px-3 py-2 text-xs font-medium text-text transition hover:bg-bg-surface2 disabled:opacity-50"
+          >
+            <CopyPlus size={13} /> {isCloning ? "Clonando…" : "Clonar"}
+          </button>
           <Link
             href={`${basePath}/${o.id}/editar`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-xs font-semibold text-white transition hover:opacity-90"
@@ -82,6 +106,12 @@ export function OrcamentoDetalhe({ orcamento: o, basePath }: Props) {
           </Link>
         </div>
       </div>
+
+      {cloneError && (
+        <div className="rounded-xl border border-danger/20 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {cloneError}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-bg-border bg-bg-surface p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">

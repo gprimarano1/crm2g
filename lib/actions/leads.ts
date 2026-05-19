@@ -35,6 +35,7 @@ export type Lead = {
   desqualificado_motivo: string | null;
   orcamento_valor: number | null;
   orcamento_arquivo_url: string | null;
+  orcamento_link_url: string | null;
   venda_pedido_url: string | null;
   created_at: string;
   updated_at: string;
@@ -318,11 +319,16 @@ export async function desqualificarLead(
 export async function marcarOrcamento(
   leadId: string,
   valor: number,
-  arquivoUrl?: string
+  arquivoUrl?: string,
+  linkUrl?: string
 ): Promise<{ success: boolean; lead?: Lead; error?: string }> {
   return transitionLeadStatus(
     leadId, "orcamento_enviado",
-    { orcamento_valor: valor, ...(arquivoUrl ? { orcamento_arquivo_url: arquivoUrl } : {}) },
+    {
+      orcamento_valor: valor,
+      ...(arquivoUrl ? { orcamento_arquivo_url: arquivoUrl } : {}),
+      ...(linkUrl    ? { orcamento_link_url:    linkUrl    } : {}),
+    },
     `Orçamento: R$ ${valor.toFixed(2)}`,
     "SubmitApplication",
     valor
