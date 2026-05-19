@@ -8,6 +8,7 @@ import {
   ShoppingCart,
   Banknote,
   BarChart3,
+  Receipt,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { DashboardKPIs } from "@/lib/types/dashboard";
@@ -121,7 +122,7 @@ export function DashboardKPIs({ kpis }: { kpis: DashboardKPIs }) {
       variants={containerVariants}
       initial="hidden"
       animate="show"
-      className="grid grid-cols-2 gap-4 xl:grid-cols-5"
+      className="grid grid-cols-2 gap-4 lg:grid-cols-3 xl:grid-cols-6"
     >
       <KPICard
         icon={<DollarSign size={20} />}
@@ -137,6 +138,15 @@ export function DashboardKPIs({ kpis }: { kpis: DashboardKPIs }) {
         value={kpis.leads_total}
         sub="todos os clientes"
         iconColor="bg-accent/10 text-accent"
+        formatter={fmtInt}
+        animate
+      />
+      <KPICard
+        icon={<Receipt size={20} />}
+        label="Orçamentos gerados"
+        value={kpis.orcamentos_total}
+        sub="no período"
+        iconColor="bg-warning/10 text-warning"
         formatter={fmtInt}
         animate
       />

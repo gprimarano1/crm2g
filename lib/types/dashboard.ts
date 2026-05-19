@@ -4,9 +4,15 @@
 export type DashboardKPIs = {
   investimento_total: number;
   leads_total:        number;
+  orcamentos_total:   number;
   cpl_medio:          number;
   vendas_fechadas:    number;
   receita_total:      number;
+};
+
+export type FunilStage = {
+  label: string;
+  count: number;
 };
 
 export type WeeklyPoint = {
@@ -41,6 +47,7 @@ export type ClienteMiniKPI = {
 export type DashboardData = {
   kpis:     DashboardKPIs;
   chart:    WeeklyPoint[];
+  funil:    FunilStage[];
   alerts:   DashboardAlert[];
   clientes: ClienteMiniKPI[];
 };

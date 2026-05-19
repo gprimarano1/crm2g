@@ -6,7 +6,7 @@ import { getDashboardData } from "@/lib/actions/dashboard";
 import { parseDashboardFilters, getPeriodoLabel } from "@/lib/utils/dashboard-filters";
 import { DashboardFilters } from "@/components/dashboard/DashboardFilters";
 import { DashboardKPIs } from "@/components/dashboard/DashboardKPIs";
-import { DashboardChart } from "@/components/dashboard/DashboardChart";
+import { DashboardFunil } from "@/components/dashboard/DashboardFunil";
 import { DashboardAlerts } from "@/components/dashboard/DashboardAlerts";
 import { ClientesMiniList } from "@/components/dashboard/ClientesMiniList";
 
@@ -69,20 +69,19 @@ async function DashboardContent({
       {/* KPIs */}
       <DashboardKPIs kpis={data.kpis} />
 
-      {/* Gráfico + Alertas */}
+      {/* Funil + Alertas */}
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-3">
         <div className="rounded-2xl border border-bg-border bg-bg-surface p-5 lg:col-span-2">
-          <div className="mb-4">
+          <div className="mb-5">
             <h2 className="font-display font-semibold text-text">
-              Leads e Vendas — {periodoLabel}
+              Funil de conversão — {periodoLabel}
             </h2>
             <p className="mt-0.5 text-xs text-text-muted">
-              {clienteFiltrado
-                ? "cliente selecionado"
-                : "total consolidado de todos os clientes"}
+              Leads → Orçamentos → Vendas
+              {clienteFiltrado ? " · cliente selecionado" : " · total consolidado"}
             </p>
           </div>
-          <DashboardChart data={data.chart} />
+          <DashboardFunil stages={data.funil} />
         </div>
 
         <div className="rounded-2xl border border-bg-border bg-bg-surface p-5">

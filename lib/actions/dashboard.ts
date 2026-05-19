@@ -9,6 +9,7 @@ import type {
   DashboardAlert,
   ClienteMiniKPI,
   WeeklyPoint,
+  FunilStage,
 } from "@/lib/types/dashboard";
 
 // ================================================================
@@ -63,8 +64,16 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
     .lt("data_registro",  dateToStr);
   if (clienteId) metricasQ = metricasQ.eq("cliente_id", clienteId);
 
-  const [clientesRes, campanhasAlertasRes, leadsRes, metricasRes, diariasRes] = await Promise.all([
-    clientesQ, campanhasAlertasQ, leadsQ, metricasQ, diariasQ,
+  // Orçamentos: filtrados pelo período (data_emissao)
+  let orcamentosQ = supabase
+    .from("orcamentos")
+    .select("id, cliente_id, data_emissao")
+    .gte("data_emissao", dateFromStr)
+    .lt("data_emissao",  dateToStr);
+  if (clienteId) orcamentosQ = orcamentosQ.eq("cliente_id", clienteId);
+
+  const [clientesRes, campanhasAlertasRes, leadsRes, metricasRes, diariasRes, orcamentosRes] = await Promise.all([
+    clientesQ, campanhasAlertasQ, leadsQ, metricasQ, diariasQ, orcamentosQ,
   ]);
 
   const clientes         = clientesRes.data        ?? [];
@@ -72,12 +81,14 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const leads            = leadsRes.data            ?? [];
   const metricas         = metricasRes.data         ?? [];
   const diarias          = diariasRes.data          ?? [];
+  const orcamentos       = orcamentosRes.data       ?? [];
 
   // ── KPIs ─────────────────────────────────────────────────────
 
   // Investimento sempre de campanhas_diarias (mesma fonte da página /campanhas)
   const investimento_total = diarias.reduce((s, d) => s + (d.gasto ?? 0), 0);
   const leads_total        = leads.length;
+  const orcamentos_total   = orcamentos.length;
   const cpl_medio          = leads_total > 0 ? investimento_total / leads_total : 0;
 
   // Vendas combinadas: automático (leads) + manual (lançamentos)
@@ -143,6 +154,14 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   const diffDays = Math.ceil((dateTo.getTime() - dateFrom.getTime()) / (1000 * 60 * 60 * 24));
   const chart    = buildChart(leads, metricas, dateFrom, dateTo, diffDays <= 14);
 
+  // ── Funil: Leads → Orçamentos → Vendas ───────────────────────
+
+  const funil: FunilStage[] = [
+    { label: "Leads",      count: leads_total },
+    { label: "Orçamentos", count: orcamentos_total },
+    { label: "Vendas",     count: vendas_fechadas },
+  ];
+
   // ── Mini-KPIs por cliente ─────────────────────────────────────
 
   const clientesMini: ClienteMiniKPI[] = clientes.map((c) => {
@@ -159,8 +178,9 @@ export async function getDashboardData(filters: DashboardFilters): Promise<Dashb
   });
 
   return {
-    kpis: { investimento_total, leads_total, cpl_medio, vendas_fechadas, receita_total },
+    kpis: { investimento_total, leads_total, orcamentos_total, cpl_medio, vendas_fechadas, receita_total },
     chart,
+    funil,
     alerts,
     clientes: clientesMini,
   };
