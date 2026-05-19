@@ -116,7 +116,7 @@ function ModalWrapper({
         animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.96, y: 8 }}
         transition={{ duration: 0.18, ease: "easeOut" }}
-        className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-2xl border border-bg-border bg-bg-surface shadow-card"
+        className="fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm max-h-[90vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-bg-border bg-bg-surface shadow-card"
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -386,7 +386,7 @@ function OrcamentoModal({
   return (
     <ModalWrapper onClose={onClose}>
       <ModalHeader title="Marcar como Orçamento" leadNome={lead.nome} onClose={onClose} />
-      <div className="flex flex-col gap-4 p-5">
+      <div className="flex flex-col gap-4 overflow-y-auto p-5">
         <div className="flex flex-col gap-1.5">
           <label className="text-xs font-medium text-text-muted">
             Orçamento existente (opcional)
