@@ -120,7 +120,8 @@ export function NovoOrcamentoForm({
 
     if (!clienteNome.trim()) { setErro("Informe o nome do cliente"); return; }
     if (produtos.length === 0) { setErro("Adicione ao menos um produto"); return; }
-    for (const [i, p] of produtos.entries()) {
+    for (let i = 0; i < produtos.length; i++) {
+      const p = produtos[i];
       if (!p.nome.trim()) { setErro(`Produto ${i + 1}: informe o nome`); return; }
       if (!p.valor || p.valor <= 0) { setErro(`Produto ${i + 1}: informe um valor válido`); return; }
     }

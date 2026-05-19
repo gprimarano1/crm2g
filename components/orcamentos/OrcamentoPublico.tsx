@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { motion } from "framer-motion";
+import { motion, type Variants } from "framer-motion";
 import {
   MapPin,
   Phone,
@@ -34,9 +34,11 @@ function fmtData(s: string): string {
   return `${String(d).padStart(2, "0")}/${String(m).padStart(2, "0")}/${y}`;
 }
 
-const fadeUp = {
+const EASE: [number, number, number, number] = [0.16, 1, 0.3, 1];
+
+const fadeUp: Variants = {
   hidden: { opacity: 0, y: 18 },
-  show:   { opacity: 1, y: 0, transition: { duration: 0.6, ease: [0.16, 1, 0.3, 1] } },
+  show:   { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
 };
 
 export function OrcamentoPublico({ orcamento }: { orcamento: Orcamento }) {
@@ -117,7 +119,7 @@ export function OrcamentoPublico({ orcamento }: { orcamento: Orcamento }) {
             initial={{ opacity: 0, x: -20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, ease: EASE }}
             className="relative aspect-[4/5] overflow-hidden rounded-sm shadow-[0_30px_60px_-30px_rgba(139,115,85,0.4)]"
           >
             <Image
@@ -137,7 +139,7 @@ export function OrcamentoPublico({ orcamento }: { orcamento: Orcamento }) {
             initial={{ opacity: 0, x: 20 }}
             whileInView={{ opacity: 1, x: 0 }}
             viewport={{ once: true }}
-            transition={{ duration: 0.7, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 0.7, delay: 0.1, ease: EASE }}
           >
             <div className="text-[11px] uppercase tracking-[0.2em] text-[#B8956A]">Nossa história</div>
             <h2 className="mt-3 font-display text-3xl font-bold leading-tight text-[#111]">
@@ -175,7 +177,7 @@ export function OrcamentoPublico({ orcamento }: { orcamento: Orcamento }) {
               initial={{ opacity: 0, y: 24 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
-              transition={{ duration: 0.6, delay: idx * 0.05, ease: [0.16, 1, 0.3, 1] }}
+              transition={{ duration: 0.6, delay: idx * 0.05, ease: EASE }}
               className="grid gap-6 overflow-hidden rounded-sm border border-[#E8E4DD] bg-white p-5 md:grid-cols-[260px_1fr] md:p-6"
             >
               {/* Imagem */}
