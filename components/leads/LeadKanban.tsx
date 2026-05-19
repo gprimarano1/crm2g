@@ -110,17 +110,22 @@ function ModalWrapper({
         className="fixed inset-0 z-40 bg-black/70 backdrop-blur-sm"
         onClick={onClose}
       />
-      <motion.div
-        key="modal"
-        initial={{ opacity: 0, scale: 0.96, y: 8 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        exit={{ opacity: 0, scale: 0.96, y: 8 }}
-        transition={{ duration: 0.18, ease: "easeOut" }}
-        className="fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm max-h-[90vh] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-2xl border border-bg-border bg-bg-surface shadow-card"
-        onClick={(e) => e.stopPropagation()}
+      <div
+        key="modal-container"
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        onClick={onClose}
       >
-        {children}
-      </motion.div>
+        <motion.div
+          initial={{ opacity: 0, scale: 0.96, y: 8 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          exit={{ opacity: 0, scale: 0.96, y: 8 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          className="flex w-full max-w-sm max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-bg-border bg-bg-surface shadow-card"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {children}
+        </motion.div>
+      </div>
     </AnimatePresence>
   );
 }
