@@ -126,17 +126,21 @@ export async function sendCAPIEvent(
     errorMessage = String(err);
   }
 
-  await supabase.from("capi_eventos").insert({
+  const { error: logError } = await supabase.from("capi_eventos").insert({
     cliente_id:    clienteId,
     lead_id:       leadId,
     event_name:    eventName,
+    event_time:    eventTime,
     event_id:      eventId,
     pixel_id:      pixelId,
     status,
     payload,
-    response,
+    response:      response ?? {},
     error_message: errorMessage,
   });
+  if (logError) {
+    console.error(`[CAPI] Falha ao gravar log em capi_eventos: ${logError.message}`);
+  }
 
   return {
     success: status === "sucesso",

@@ -255,18 +255,25 @@ async function transitionLeadStatus(
 
   if (capiEventName) {
     if (cliente?.meta_pixel_id && cliente?.meta_capi_token) {
-      sendCAPIEvent(
-        lead.cliente_id, leadId, capiEventName,
-        {
-          email:    lead.email    ?? undefined,
-          telefone: lead.telefone ?? undefined,
-          nome:     lead.nome     ?? undefined,
-          valor:    capiValor,
-        },
-        { pixelId: cliente.meta_pixel_id, capiToken: cliente.meta_capi_token }
-      ).then((r) => {
-        if (r.success) supabase.from("leads").update({ capi_enviado: true }).eq("id", leadId);
-      }).catch(() => {});
+      try {
+        const capiResult = await sendCAPIEvent(
+          lead.cliente_id, leadId, capiEventName,
+          {
+            email:    lead.email    ?? undefined,
+            telefone: lead.telefone ?? undefined,
+            nome:     lead.nome     ?? undefined,
+            valor:    capiValor,
+          },
+          { pixelId: cliente.meta_pixel_id, capiToken: cliente.meta_capi_token }
+        );
+        if (capiResult.success) {
+          await supabase.from("leads").update({ capi_enviado: true }).eq("id", leadId);
+        }
+      } catch (err) {
+        console.error(`[CAPI] Falha ao enviar ${capiEventName} para lead ${leadId}:`, err);
+      }
+    } else {
+      console.warn(`[CAPI] ${capiEventName} não enviado para lead ${leadId}: cliente ${lead.cliente_id} sem credenciais Meta`);
     }
   }
 
