@@ -215,23 +215,32 @@ async function transitionLeadStatus(
 ): Promise<{ success: boolean; lead?: Lead; error?: string }> {
   const supabase = await createAdminClient();
 
-  const { data: lead, error: leadError } = await supabase
+  // Busca lead e cliente separadamente para evitar problemas com join !inner no PostgREST
+  const { data: leadRows, error: leadError } = await supabase
     .from("leads")
-    .select("*, clientes!inner(meta_pixel_id, meta_capi_token)")
+    .select("*")
     .eq("id", leadId)
-    .maybeSingle();
+    .limit(1);
 
   if (leadError) return { success: false, error: leadError.message };
+  const lead = leadRows?.[0] ?? null;
   if (!lead) return { success: false, error: "Lead não encontrado" };
 
-  const { data: updatedLead, error: updateError } = await supabase
+  const { data: clienteRows } = await supabase
+    .from("clientes")
+    .select("meta_pixel_id, meta_capi_token")
+    .eq("id", lead.cliente_id)
+    .limit(1);
+  const cliente = clienteRows?.[0] ?? null;
+
+  const { data: updatedRows, error: updateError } = await supabase
     .from("leads")
     .update({ status: newStatus, ...extraData })
     .eq("id", leadId)
-    .select("*")
-    .single();
+    .select("*");
 
   if (updateError) return { success: false, error: updateError.message };
+  const updatedLead = updatedRows?.[0] ?? null;
   if (!updatedLead) return { success: false, error: "Atualização não aplicada ao banco de dados" };
 
   if (lead.status !== newStatus) {
@@ -244,7 +253,6 @@ async function transitionLeadStatus(
   }
 
   if (capiEventName) {
-    const cliente = lead.clientes as { meta_pixel_id: string | null; meta_capi_token: string | null } | null;
     if (cliente?.meta_pixel_id && cliente?.meta_capi_token) {
       sendCAPIEvent(
         lead.cliente_id, leadId, capiEventName,
