@@ -3,12 +3,20 @@ import Link from "next/link";
 import { FileText, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getOrcamentos } from "@/lib/actions/orcamentos";
+import { agregarTopProdutos } from "@/lib/orcamentos/agregacoes";
 import { OrcamentosList } from "@/components/orcamentos/OrcamentosList";
+import { OrcamentosFiltros } from "@/components/orcamentos/OrcamentosFiltros";
+import { TopProdutosCard } from "@/components/orcamentos/TopProdutosCard";
 
 export const metadata: Metadata = { title: "Orçamentos" };
 
 interface PageProps {
-  searchParams: { cliente?: string; status?: string };
+  searchParams: {
+    cliente?:     string;
+    status?:      string;
+    data_inicio?: string;
+    data_fim?:    string;
+  };
 }
 
 export default async function OrcamentosAdminPage({ searchParams }: PageProps) {
@@ -20,9 +28,13 @@ export default async function OrcamentosAdminPage({ searchParams }: PageProps) {
     .order("nome_empresa");
 
   const orcamentos = await getOrcamentos({
-    clienteId: searchParams.cliente && searchParams.cliente !== "todos" ? searchParams.cliente : undefined,
-    status:    searchParams.status,
+    clienteId:  searchParams.cliente && searchParams.cliente !== "todos" ? searchParams.cliente : undefined,
+    status:     searchParams.status,
+    dataInicio: searchParams.data_inicio,
+    dataFim:    searchParams.data_fim,
   });
+
+  const topProdutos = agregarTopProdutos(orcamentos, 10);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -47,33 +59,12 @@ export default async function OrcamentosAdminPage({ searchParams }: PageProps) {
         </Link>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-bg-border bg-bg-surface px-4 py-3">
-        <span className="text-xs font-medium text-text-muted">Filtrar:</span>
-        <FiltroLink href="/orcamentos" label="Todos" active={!searchParams.cliente || searchParams.cliente === "todos"} />
-        {(clientes ?? []).map((c) => (
-          <FiltroLink
-            key={c.id}
-            href={`/orcamentos?cliente=${c.id}`}
-            label={c.nome_empresa}
-            active={searchParams.cliente === c.id}
-          />
-        ))}
+      <OrcamentosFiltros clientes={clientes ?? []} />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+        <OrcamentosList orcamentos={orcamentos} basePath="/orcamentos" showCliente />
+        <TopProdutosCard itens={topProdutos} />
       </div>
-
-      <OrcamentosList orcamentos={orcamentos} basePath="/orcamentos" showCliente />
     </div>
-  );
-}
-
-function FiltroLink({ href, label, active }: { href: string; label: string; active: boolean }) {
-  return (
-    <Link
-      href={href}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-        active ? "bg-accent text-white" : "bg-bg text-text-muted hover:text-text"
-      }`}
-    >
-      {label}
-    </Link>
   );
 }

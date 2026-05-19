@@ -73,8 +73,10 @@ function gerarNumero(): string {
 // ================================================================
 
 export async function getOrcamentos(opts?: {
-  clienteId?: string;
-  status?:    string;
+  clienteId?:  string;
+  status?:     string;
+  dataInicio?: string; // YYYY-MM-DD — filtra por data_emissao >=
+  dataFim?:    string; // YYYY-MM-DD — filtra por data_emissao <=
 }): Promise<OrcamentoComCliente[]> {
   const supabase = await createClient();
 
@@ -85,6 +87,8 @@ export async function getOrcamentos(opts?: {
 
   if (opts?.clienteId) q = q.eq("cliente_id", opts.clienteId);
   if (opts?.status && opts.status !== "todos") q = q.eq("status", opts.status);
+  if (opts?.dataInicio) q = q.gte("data_emissao", opts.dataInicio);
+  if (opts?.dataFim)    q = q.lte("data_emissao", opts.dataFim);
 
   const { data } = await q;
   return (data ?? []).map((row) => {
@@ -95,6 +99,7 @@ export async function getOrcamentos(opts?: {
     return { ...(rest as Orcamento), cliente_empresa: empresa };
   });
 }
+
 
 export async function getOrcamentoById(id: string): Promise<Orcamento | null> {
   const supabase = await createClient();

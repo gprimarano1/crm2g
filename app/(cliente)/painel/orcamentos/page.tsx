@@ -4,7 +4,10 @@ import { redirect } from "next/navigation";
 import { FileText, Plus } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getOrcamentos } from "@/lib/actions/orcamentos";
+import { agregarTopProdutos } from "@/lib/orcamentos/agregacoes";
 import { OrcamentosList } from "@/components/orcamentos/OrcamentosList";
+import { OrcamentosFiltros } from "@/components/orcamentos/OrcamentosFiltros";
+import { TopProdutosCard } from "@/components/orcamentos/TopProdutosCard";
 
 export const metadata: Metadata = { title: "Orçamentos" };
 
@@ -20,11 +23,26 @@ async function getClienteId(): Promise<string | null> {
   return profile?.cliente_id ?? null;
 }
 
-export default async function OrcamentosClientePage() {
+interface PageProps {
+  searchParams: {
+    status?:      string;
+    data_inicio?: string;
+    data_fim?:    string;
+  };
+}
+
+export default async function OrcamentosClientePage({ searchParams }: PageProps) {
   const clienteId = await getClienteId();
   if (!clienteId) redirect("/login");
 
-  const orcamentos = await getOrcamentos({ clienteId });
+  const orcamentos = await getOrcamentos({
+    clienteId,
+    status:     searchParams.status,
+    dataInicio: searchParams.data_inicio,
+    dataFim:    searchParams.data_fim,
+  });
+
+  const topProdutos = agregarTopProdutos(orcamentos, 10);
 
   return (
     <div className="flex flex-col gap-6 p-6">
@@ -51,7 +69,12 @@ export default async function OrcamentosClientePage() {
         </Link>
       </div>
 
-      <OrcamentosList orcamentos={orcamentos} basePath="/painel/orcamentos" />
+      <OrcamentosFiltros />
+
+      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1fr_360px]">
+        <OrcamentosList orcamentos={orcamentos} basePath="/painel/orcamentos" />
+        <TopProdutosCard itens={topProdutos} />
+      </div>
     </div>
   );
 }
