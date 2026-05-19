@@ -4,6 +4,22 @@ import type { DashboardFilters } from "@/lib/types/dashboard";
 // parseDashboardFilters — converte searchParams em DashboardFilters
 // ================================================================
 
+// Brasil: UTC-3 fixo (sem DST desde 2019)
+const BR_OFFSET_HOURS = 3;
+const BR_OFFSET_MS    = BR_OFFSET_HOURS * 60 * 60 * 1000;
+const dayMs           = 24 * 60 * 60 * 1000;
+
+// Cria um Date representando meia-noite Brasil (03:00 UTC) do dia (y, m, d) Brasil
+function brMidnight(y: number, m: number, d: number): Date {
+  return new Date(Date.UTC(y, m, d, BR_OFFSET_HOURS, 0, 0));
+}
+
+// Parseia "YYYY-MM-DD" como meia-noite Brasil daquele dia
+function parseBrDateString(s: string): Date {
+  const [y, m, d] = s.split("-").map(Number);
+  return brMidnight(y, (m ?? 1) - 1, d ?? 1);
+}
+
 export function parseDashboardFilters(params: {
   cliente?:     string;
   periodo?:     string;
@@ -12,33 +28,39 @@ export function parseDashboardFilters(params: {
 }): DashboardFilters {
   const { cliente, periodo = "7d", data_inicio, data_fim } = params;
 
-  const now     = new Date();
-  const todayMs = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-  const dayMs   = 24 * 60 * 60 * 1000;
+  // Componentes de data no fuso de Brasil (independente do TZ do servidor)
+  const nowBr = new Date(Date.now() - BR_OFFSET_MS);
+  const yr    = nowBr.getUTCFullYear();
+  const mo    = nowBr.getUTCMonth();
+  const da    = nowBr.getUTCDate();
+
+  const todayBr = brMidnight(yr, mo, da);
 
   let dateFrom: Date;
-  let dateTo = new Date(todayMs + dayMs);
+  let dateTo   = new Date(todayBr.getTime() + dayMs);
 
   switch (periodo) {
     case "hoje":
-      dateFrom = new Date(todayMs);
+      dateFrom = todayBr;
       break;
     case "14d":
-      dateFrom = new Date(todayMs - 13 * dayMs);
+      dateFrom = new Date(todayBr.getTime() - 13 * dayMs);
       break;
     case "mes":
-      dateFrom = new Date(now.getFullYear(), now.getMonth(), 1);
+      dateFrom = brMidnight(yr, mo, 1);
       break;
     case "mes_passado":
-      dateFrom = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      dateTo   = new Date(now.getFullYear(), now.getMonth(), 1);
+      dateFrom = brMidnight(yr, mo - 1, 1);
+      dateTo   = brMidnight(yr, mo, 1);
       break;
-    case "custom":
-      dateFrom = data_inicio ? new Date(data_inicio) : new Date(todayMs - 6 * dayMs);
-      dateTo   = data_fim    ? new Date(new Date(data_fim).getTime() + dayMs) : new Date(todayMs + dayMs);
+    case "custom": {
+      dateFrom = data_inicio ? parseBrDateString(data_inicio) : new Date(todayBr.getTime() - 6 * dayMs);
+      const fimBr = data_fim ? parseBrDateString(data_fim) : todayBr;
+      dateTo = new Date(fimBr.getTime() + dayMs);
       break;
+    }
     default: // "7d"
-      dateFrom = new Date(todayMs - 6 * dayMs);
+      dateFrom = new Date(todayBr.getTime() - 6 * dayMs);
   }
 
   return {
