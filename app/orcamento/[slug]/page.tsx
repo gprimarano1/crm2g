@@ -9,9 +9,9 @@ interface PageProps {
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const orc = await getOrcamentoBySlug(params.slug);
-  if (!orc) return { title: "Orçamento não encontrado" };
+  if (!orc) return { title: { absolute: "Orçamento não encontrado" } };
   return {
-    title: `Orçamento — ${orc.cliente_nome} | Full House`,
+    title: { absolute: `Orçamento — ${orc.cliente_nome} | Full House` },
     description: `Orçamento exclusivo Full House Decoração para ${orc.cliente_nome}.`,
   };
 }
