@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { motion } from "framer-motion";
 import {
   ExternalLink,
@@ -12,8 +12,13 @@ import {
   FileText,
   Edit3,
   Trash2,
+  CopyPlus,
 } from "lucide-react";
-import { deletarOrcamento, type OrcamentoComCliente } from "@/lib/actions/orcamentos";
+import {
+  deletarOrcamento,
+  duplicarOrcamento,
+  type OrcamentoComCliente,
+} from "@/lib/actions/orcamentos";
 import { useRouter } from "next/navigation";
 
 const STATUS_META: Record<
@@ -46,7 +51,9 @@ interface Props {
 }
 
 export function OrcamentosList({ orcamentos, basePath, showCliente = false }: Props) {
-  const [copied, setCopied] = useState<string | null>(null);
+  const [copied, setCopied]       = useState<string | null>(null);
+  const [cloningId, setCloningId] = useState<string | null>(null);
+  const [, startClone]            = useTransition();
   const router = useRouter();
 
   async function copiarLink(slug: string) {
@@ -61,6 +68,19 @@ export function OrcamentosList({ orcamentos, basePath, showCliente = false }: Pr
     const res = await deletarOrcamento(id);
     if (!res.success) alert(res.error ?? "Erro ao excluir");
     else router.refresh();
+  }
+
+  function clonar(id: string) {
+    setCloningId(id);
+    startClone(async () => {
+      const res = await duplicarOrcamento(id);
+      if (!res.success || !res.id) {
+        alert(res.error ?? "Erro ao clonar orçamento");
+        setCloningId(null);
+        return;
+      }
+      router.push(`${basePath}/${res.id}/editar`);
+    });
   }
 
   if (orcamentos.length === 0) {
@@ -109,7 +129,14 @@ export function OrcamentosList({ orcamentos, basePath, showCliente = false }: Pr
                 >
                   {o.cliente_nome}
                 </Link>
-                <div className="text-[11px] text-text-subtle">{o.numero ?? "—"}</div>
+                <div className="flex items-center gap-1.5 text-[11px] text-text-subtle">
+                  <span>{o.numero ?? "—"}</span>
+                  {o.revisao_numero > 0 && (
+                    <span className="inline-flex items-center rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-semibold text-warning">
+                      R{o.revisao_numero}
+                    </span>
+                  )}
+                </div>
               </td>
               {showCliente && (
                 <td className="px-4 py-3 text-text-muted">
@@ -167,6 +194,14 @@ export function OrcamentosList({ orcamentos, basePath, showCliente = false }: Pr
                   >
                     <Edit3 size={14} />
                   </Link>
+                  <button
+                    onClick={() => clonar(o.id)}
+                    disabled={cloningId === o.id}
+                    title="Clonar (gera revisão R+1 e abre para edição)"
+                    className="rounded-lg p-1.5 text-text-muted transition hover:bg-accent/10 hover:text-accent disabled:opacity-50"
+                  >
+                    <CopyPlus size={14} className={cloningId === o.id ? "animate-pulse" : ""} />
+                  </button>
                   <button
                     onClick={() => excluir(o.id)}
                     title="Excluir"

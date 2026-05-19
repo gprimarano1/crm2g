@@ -116,8 +116,13 @@ export function OrcamentoDetalhe({ orcamento: o, basePath }: Props) {
       <div className="rounded-2xl border border-bg-border bg-bg-surface p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-text-subtle">
-              {o.numero ?? "Orçamento"}
+            <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider text-text-subtle">
+              <span>{o.numero ?? "Orçamento"}</span>
+              {o.revisao_numero > 0 && (
+                <span className="inline-flex items-center rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-bold text-warning">
+                  R{o.revisao_numero}
+                </span>
+              )}
             </div>
             <h1 className="mt-1 font-display text-2xl font-bold text-text">
               {o.cliente_nome}

@@ -46,6 +46,8 @@ export type Orcamento = {
   aceito_em:        string | null;
   recusado_em:      string | null;
   visualizacoes:    number;
+  revisao_de:       string | null;
+  revisao_numero:   number;
   created_at:       string;
   updated_at:       string;
 };
@@ -245,6 +247,16 @@ export async function duplicarOrcamento(
 
   const total = calcularTotal(original.produtos);
 
+  // Raiz da árvore de revisões: se o original já é uma revisão, herda o raiz
+  const rootId = original.revisao_de ?? original.id;
+
+  // Conta revisões existentes deste raiz para gerar R{n+1}
+  const { count } = await supabase
+    .from("orcamentos")
+    .select("id", { count: "exact", head: true })
+    .eq("revisao_de", rootId);
+  const revisaoNumero = (count ?? 0) + 1;
+
   const { data, error } = await supabase
     .from("orcamentos")
     .insert({
@@ -261,6 +273,8 @@ export async function duplicarOrcamento(
       observacoes:      original.observacoes,
       total,
       status:           "rascunho",
+      revisao_de:       rootId,
+      revisao_numero:   revisaoNumero,
       created_by:       user.id,
     })
     .select("id, slug")
