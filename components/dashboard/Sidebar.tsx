@@ -9,6 +9,7 @@ import {
   Megaphone,
   Users2,
   FileText,
+  Receipt,
   BarChart2,
   Settings,
   LogOut,
@@ -30,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: "/campanhas",   label: "Campanhas",   icon: Megaphone },
   { href: "/leads",       label: "Leads",       icon: Users2 },
   { href: "/propostas",   label: "Propostas",   icon: FileText },
+  { href: "/orcamentos",  label: "Orçamentos",  icon: Receipt },
   { href: "/relatorios",  label: "Relatórios",  icon: BarChart2 },
 ];
 

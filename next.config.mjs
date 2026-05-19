@@ -20,6 +20,11 @@ const nextConfig = {
         protocol: "https",
         hostname: "www.crm2g.com",
       },
+      // Full House — logo, imagem do casal e fotos das unidades usadas em orçamentos
+      {
+        protocol: "https",
+        hostname: "fullhousedecoracao.com.br",
+      },
     ],
     // Formatos modernos
     formats: ["image/avif", "image/webp"],

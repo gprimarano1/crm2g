@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users2, KeyRound, LogOut } from "lucide-react";
+import { Users2, KeyRound, LogOut, Receipt } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 
 const NAV_ITEMS = [
-  { href: "/painel", label: "Leads", icon: Users2 },
+  { href: "/painel",            label: "Leads",      icon: Users2 },
+  { href: "/painel/orcamentos", label: "Orçamentos", icon: Receipt },
 ];
 
 interface ClienteShellProps {
@@ -39,7 +40,10 @@ export function ClienteShell({ nomeEmpresa, userName, children }: ClienteShellPr
           <nav className="flex items-center gap-1">
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
-              const active = pathname === item.href;
+              const active =
+                item.href === "/painel"
+                  ? pathname === "/painel"
+                  : pathname.startsWith(item.href);
               return (
                 <Link
                   key={item.href}
