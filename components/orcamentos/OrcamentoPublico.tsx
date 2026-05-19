@@ -178,17 +178,17 @@ export function OrcamentoPublico({ orcamento }: { orcamento: Orcamento }) {
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true }}
               transition={{ duration: 0.6, delay: idx * 0.05, ease: EASE }}
-              className="grid gap-6 overflow-hidden rounded-sm border border-[#E8E4DD] bg-white p-5 md:grid-cols-[260px_1fr] md:p-6"
+              className="grid gap-6 overflow-hidden rounded-sm border border-[#E8E4DD] bg-white p-5 md:grid-cols-[340px_1fr] md:p-6"
             >
               {/* Imagem */}
-              <div className="relative aspect-square overflow-hidden rounded-sm bg-[#F4F0E8]">
+              <div className="relative aspect-square overflow-hidden rounded-sm bg-white">
                 {p.imagem_url ? (
                   <Image
                     src={p.imagem_url}
                     alt={p.nome}
                     fill
-                    sizes="(min-width: 768px) 260px, 100vw"
-                    className="object-cover"
+                    sizes="(min-width: 768px) 340px, 100vw"
+                    className="object-contain"
                   />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-[11px] uppercase tracking-wider text-[#9A9A9A]">
